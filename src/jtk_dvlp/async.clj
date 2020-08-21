@@ -4,7 +4,7 @@
    [clojure.core.async]))
 
 
-(defmacro safe
+(defmacro ^:private safe
   [& body]
   (if (:ns &env)
     `(try
@@ -23,7 +23,7 @@
 (defmacro <e!
   "Like `<!` but tests taken val instance of `ExceptionInfo`, if so throws it.
 
-   Usage in combination with `go*`."
+   Usage in combination with `try-go`."
   [?exp]
   (if (:ns &env)
     `(let [v# (cljs.core.async/<! ~?exp)]
@@ -35,7 +35,7 @@
          (throw v#)
          v#))))
 
-(defmacro go*
+(defmacro try-go
   "Like `go` but carries thrown `ExceptionInfo` as result.
 
    Usage in combination with `<e!`, `<p!` and `<cb!`."
@@ -81,7 +81,7 @@
           (-> forms (vec) (conj put-callback-result!)))]
 
     (if (:ns &env)
-      `(go*
+      `(try-go
         (let [callback-result#
               (cljs.core.async/promise-chan)
 
@@ -97,7 +97,7 @@
 
            :callback-result
            (cljs.core.asyn/<! callback-result#)}))
-      `(go*
+      `(try-go
         (let [callback-result#
               (clojure.core.async/promise-chan)
 

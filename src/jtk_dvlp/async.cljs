@@ -3,7 +3,7 @@
    :exclude [map])
 
   (:require-macros
-   [jtk-dvlp.async :refer [<e! go* ?map cb->c <cb! safe]])
+   [jtk-dvlp.async :refer [<e! try-go ?map cb->c <cb! safe]])
 
   (:require
    [cljs.core.async :refer [go <! close! map]]))

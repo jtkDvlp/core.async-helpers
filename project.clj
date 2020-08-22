@@ -12,12 +12,6 @@
    :url
    "https://www.eclipse.org/legal/epl-2.0/"}
 
-  :dependencies
-  [[org.clojure/clojure "1.10.0"]
-   [org.clojure/clojurescript "1.10.773"]
-
-   [org.clojure/core.async "1.2.603"]]
-
   :source-paths
   ["src"]
 
@@ -29,7 +23,13 @@
   [:target-path]
 
   :profiles
-  {:dev
+  {:provided
+   {:dependencies
+    [[org.clojure/clojure "1.10.0"]
+     [org.clojure/clojurescript "1.10.773"]
+     [org.clojure/core.async "1.2.603"]]}
+
+   :dev
    {:dependencies
     [[com.bhauman/figwheel-main "0.2.7"]]
 

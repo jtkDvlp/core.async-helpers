@@ -32,10 +32,11 @@
       (resolve or reject).
 
       If calling `exp` fails an `ExceptionInfo` will be put onto the
-      new created channel with fail informationen. The channel will be
+      new created channel with fail information. The channel will be
       closed then.
 
       Example:
+      ```
       (let [callback-based-fn
             (fn callback-based-fn
               [value-to-carry has-to-fail? success fail]
@@ -59,7 +60,8 @@
                (println))
 
            (catch clojure.lang.ExceptionInfo e
-         (println e)))))"
+         (println e)))))
+      ```"
 
      ([exp]
       `(cb->c ~exp true))

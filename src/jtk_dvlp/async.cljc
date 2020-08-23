@@ -70,7 +70,7 @@
             v#)))))
 
 (defn map
-  "Like `map but carries thrown `ExceptionInfo` as result.
+  "Like `map` but carries thrown `ExceptionInfo` as result.
 
    Usage in combination with `<e!`."
   [f chs]

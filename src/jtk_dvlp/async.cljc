@@ -4,17 +4,21 @@
 
   #?(:cljs
      (:require-macros
-      [jtk-dvlp.async :refer [go* <e! <p!]]))
+      [jtk-dvlp.async :refer [go* <e! <p! <cb!]]))
 
   #?(:clj
      (:require
       [clojure.core.async :as async]
       [jtk-dvlp.async.interop.promise]
+      [jtk-dvlp.async.interop.callback])
 
      :cljs
      (:require
       [clojure.core.async :as async]
-      [jtk-dvlp.async.interop.promise])))
+      [jtk-dvlp.async.interop.promise]
+      [jtk-dvlp.async.interop.callback]))
+
+  ,,,)
 
 
 #?(:clj
@@ -114,3 +118,11 @@
       Usage in combination with `go*`."
      [?exp]
      `(<e! (jtk-dvlp.async.interop.promise/p->c ~?exp))))
+
+#?(:clj
+   (defmacro <cb!
+     "Like `<e!` for callback based functions via `cb->c` convertion.
+
+      Usage in combination with `go*`."
+     [?exp]
+     `(<e! (jtk-dvlp.async.interop.callback/cb->c ~?exp))))

@@ -13,7 +13,7 @@
 
 
 (defn p->c
-  "Creates a promise-channel and put the val of resolved promise `p`
+  "Creates a `promise-chan` and put the val of resolved promise `p`
    or put an instance of `ExceptionInfo` if promise is rejected.
    Closes the channel after took val."
   [p]

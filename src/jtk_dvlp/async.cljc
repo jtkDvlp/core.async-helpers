@@ -4,7 +4,7 @@
 
   #?(:cljs
      (:require-macros
-      [jtk-dvlp.async :refer [go* <e! <p! <cb!]]))
+      [jtk-dvlp.async :refer [go* <e! <p! <cb! safe]]))
 
   #?(:clj
      (:require

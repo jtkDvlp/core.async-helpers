@@ -4,7 +4,7 @@
 
   #?(:cljs
      (:require-macros
-      [jtk-dvlp.async :refer [go* <e! <p! <cb! safe]]))
+      [jtk-dvlp.async :refer [go* <e! <p! <cb!]]))
 
   #?(:clj
      (:require
@@ -18,28 +18,11 @@
       [jtk-dvlp.async.interop.promise]
       [jtk-dvlp.async.interop.callback]))
 
+  #?(:clj
+     (:import
+      [clojure.lang ExceptionInfo]))
+
   ,,,)
-
-
-#?(:clj
-   (defmacro ^:private safe
-     [& body]
-     (if (:ns &env)
-       `(try
-          ~@body
-          (catch cljs.core/ExceptionInfo e#
-            e#)
-          (catch js/Error e#
-            (ex-info
-             (.-message e#)
-             {:error :unknown}
-             (.-stack e#))))
-       `(try
-          ~@body
-          (catch clojure.lang.ExceptionInfo e#
-            e#)
-          (catch Throwable e#
-            (ex-info "error" {:error :unknown} e#))))))
 
 #?(:clj
    (defmacro go*
@@ -49,9 +32,19 @@
      [& body]
      (if (:ns &env)
        `(cljs.core.async/go
-          (safe ~@body))
+          (try
+            ~@body
+            (catch cljs.core/ExceptionInfo e#
+              e#)
+            (catch js/Error e#
+              (ex-info "error" {:error :unknown} e#))))
        `(clojure.core.async/go
-          (safe ~@body)))))
+          (try
+            ~@body
+            (catch clojure.lang.ExceptionInfo e#
+              e#)
+            (catch Throwable e#
+              (ex-info "error" {:error :unknown} e#)))))))
 
 #?(:clj
    (defmacro <e!
@@ -76,7 +69,12 @@
   [f chs]
   (async/map
    (fn [& args]
-     (safe (apply f args)))
+     (try
+       (apply f args)
+       (catch ExceptionInfo e
+         e)
+       (catch #?(:clj Throwable :cljs js/Error) e
+         (ex-info "error" {:error :unknown} e))))
    chs))
 
 (defn promise-chan

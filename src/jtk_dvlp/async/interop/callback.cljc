@@ -103,8 +103,7 @@
                  ~put-rejection!
                  (fn [x#]
                    (->> x#
-                        (ex-info "callback error"
-                                 {:error :callback-error})
+                        (ex-info "callback error" {:error :callback-error})
                         (cljs.core.async/put! c#))
                    (auto-close!#))]
 
@@ -112,8 +111,7 @@
                (~f ~@forms')
                (catch js/Error e#
                  (->> e#
-                      (ex-info "callback based function error"
-                               {:error :callback-based-function-error})
+                      (ex-info "callback based function error" {:error :callback-based-function-error})
                       (cljs.core.async/put! c#))
                  (cljs.core.async/close! c#)))
              c#)
@@ -134,8 +132,7 @@
                  ~put-rejection!
                  (fn [x#]
                    (->> x#
-                        (ex-info "callback error"
-                                 {:error :callback-error})
+                        (ex-info "callback error" {:error :callback-error})
                         (clojure.core.async/put! c#))
                    (auto-close!#))]
 
@@ -143,8 +140,7 @@
                (~f ~@forms')
                (catch Throwable e#
                  (->> e#
-                      (ex-info "callback based function error"
-                               {:error :callback-based-function-error})
+                      (ex-info "callback based function error" {:error :callback-based-function-error})
                       (clojure.core.async/put! c#))
                  (clojure.core.async/close! c#)))
              c#))))))

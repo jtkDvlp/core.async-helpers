@@ -47,6 +47,14 @@
               (ex-info "error" {:error :unknown} e#)))))))
 
 #?(:clj
+   (defmacro go-loop*
+     "Like `go-loop` but carries thrown `ExceptionInfo` as result.
+
+      Usage in combination with `<e!`, `<p!` and `<cb!`."
+     [bindings & body]
+     `(go* (loop ~bindings ~@body))))
+
+#?(:clj
    (defmacro <e!
      "Like `<!` but tests taken val instance of `ExceptionInfo`, if so throws it.
 

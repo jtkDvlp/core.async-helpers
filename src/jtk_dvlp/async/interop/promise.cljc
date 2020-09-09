@@ -1,11 +1,17 @@
 (ns jtk-dvlp.async.interop.promise
+  #?(:cljs
+     (:require-macros
+      [jtk-dvlp.async.interop.promise :refer [promise-go <p!]]))
+
   #?(:clj
      (:require
-      [clojure.core.async :as async])
+      [clojure.core.async :as async]
+      [jtk-dvlp.async])
 
      :cljs
      (:require
-      [clojure.core.async :as async]))
+      [cljs.core.async :as async]
+      [jtk-dvlp.async]))
 
   #?(:clj
      (:import
@@ -65,3 +71,51 @@
          (if (instance? ExceptionInfo v)
            (reject v)
            (resolve v)))))))
+
+(defn promise-chan
+  "Creates an promise like channel, see `core.async/promise-chan`.
+
+   Given function `f` can be used to fill the promise.
+   `f` will be called with one arg functions `resolve` and `reject`
+   to resolve or reject the created promise. Rejection value will
+   will be used as `ex-info` `cause`."
+  ([]
+   (async/promise-chan))
+
+  ([f]
+   (let [c (async/promise-chan)
+
+         put-resolution!
+         (partial async/put! c)
+
+         put-rejection!
+         #(->> %
+               (ex-info "promise error" {:error :promise-error})
+               (async/put! c))]
+
+     (f put-resolution! put-rejection!)
+     c)))
+
+(defn ->promise-chan
+  "Ensure given channel `c` to be a `promise-chan` via
+   `pipe` it into a new `promise-chan`. See `core.async/promise-chan`
+   for more infos."
+  [c]
+  (->> (async/promise-chan)
+       (async/pipe c)))
+
+#?(:clj
+   (defmacro promise-go
+     "Like `go` but returns a `promise-chan`."
+     [& body]
+     `(jtk-dvlp.async.interop.promise/->promise-chan
+       (jtk-dvlp.async/go
+         ~@body))))
+
+#?(:clj
+   (defmacro <p!
+     "Like `<!` for promise via `p->c` convertion."
+     [?exp]
+     `(jtk-dvlp.async/<!
+       (jtk-dvlp.async.interop.promise/p->c
+        ~?exp))))

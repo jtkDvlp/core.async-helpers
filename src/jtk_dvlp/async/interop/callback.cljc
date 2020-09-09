@@ -1,11 +1,16 @@
 (ns jtk-dvlp.async.interop.callback
   #?(:cljs
      (:require-macros
-      [jtk-dvlp.async.interop.callback :refer [cb->c]]))
+      [jtk-dvlp.async.interop.callback :refer [cb->c <cb!]]))
 
   #?(:clj
      (:require
-      [clojure.walk :refer [postwalk]])))
+      [clojure.walk :refer [postwalk]]
+      [clojure.core.async])
+
+     :cljs
+     (:require
+      [cljs.core.async])))
 
 
 #?(:clj
@@ -144,3 +149,10 @@
                       (clojure.core.async/put! c#))
                  (clojure.core.async/close! c#)))
              c#))))))
+
+#?(:clj
+   (defmacro <cb!
+     "Like `<!` for callback based functions via `cb->c` convertion."
+     [?exp]
+     `(jtk-dvlp.async/<!
+       (jtk-dvlp.async.interop.callback/cb->c ~?exp))))

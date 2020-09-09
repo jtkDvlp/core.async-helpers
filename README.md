@@ -8,12 +8,12 @@ Helper pack for [core.async](https://github.com/clojure/core.async) with focus o
 
 ## Features
 
-  * error propagation by climbing up the go block stack via [go*](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#go*) and [<e!](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#<e!) (all functions within this package propagate errors)
+  * error propagation by climbing up the go block stack via [go](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#go) / [go-loop](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#go-loop) / [map](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#map) and [<!](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#<!) (all functions within this package propagate errors)
   * promise channel helpers
-    * to ensure promise-chan via [->promise-chan](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#->promise-chan) and its behavior
-    * to create promise-chan via [promise-chan](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#promise-chan) function with resolve and reject handlers
-    * conversion from channel to promise and vice versa via [c->p](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.inertop.promise#c->p), [p->c](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.inertop.promise#p->c) and [<!p](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#<!p)
-  * helpers to handle callback based functions by conversion into channel via [cb->c](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.callback#cb->c) and [<cb!](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#<cb!)
+    * to ensure promise-chan via [promise-go](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.promise#promise-go) [->promise-chan](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.promise#->promise-chan) and its behavior
+    * to create promise-chan via [promise-chan](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.promise#promise-chan) function with resolve and reject handlers
+    * conversion from channel to promise and vice versa via [c->p](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.inertop.promise#c->p), [p->c](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.inertop.promise#p->c) and [<!p](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.promise#<!p)
+  * helpers to handle callback based functions by conversion into channel via [cb->c](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.callback#cb->c) and [<cb!](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.callback#<cb!)
 
 ## Getting started
 
@@ -26,53 +26,58 @@ Add the following dependency to your `project.clj`:<br>
 
 ```clojure
 (ns your-project
-  (:require [jtk-dvlp.async :as a]))
+  #?(:clj
+     (:require
+      [clojure.core.async :refer [timeout]]
+      [jtk-dvlp.async :as a])
+
+     :cljs
+     (:require
+      [cljs.core.async :refer [timeout]]
+      [jtk-dvlp.async :as a])))
 
 
 (defn ?do-some-async-stuff
   [& args]
-  (a/go*
-   (Thread/sleep 1000)
-   (let [result
-         {:thread-id (.getId (Thread/currentThread))
-          :call-args args}]
+  (a/go
+    (a/<! (timeout 1000))
+    (let [result
+          {:call-args args}]
 
-     (println result)
-     result)))
+      (println result)
+      result)))
 
 (defn ?fail-during-some-async-stuff
   [& args]
-  (a/go*
-   (Thread/sleep 1000)
-   (->> {:thread-id (.getId (Thread/currentThread))
-         :call-args args}
-        (ex-info "you got a bug")
-        (throw))))
+  (a/go
+    (a/<! (timeout 1000))
+    (->> {:call-args args}
+         (ex-info "you got a bug")
+         (throw))))
 
 (defn ?do-some-more-stuff
   []
-  (a/go*
-   (let [a
-         (a/<e! (?do-some-async-stuff :a))
+  (a/go
+    (let [a
+          (a/<! (?do-some-async-stuff :a))
 
-         b
-         ;; Change to
-         ;; (a/<e! (?do-some-async-stuff :b))
-         (a/<e! (?fail-during-some-async-stuff :b))
+          b
+          (a/<! (?fail-during-some-async-stuff :b))
 
-         c
-         (a/<e! (?do-some-async-stuff :c))]
+          c
+          (a/<! (?do-some-async-stuff :c))]
 
-     [a b c])))
+      [a b c])))
 
 (comment
-  (a/go*
-   (try
-     (->> (?do-some-more-stuff)
-          (a/<e!)
-          (println "success"))
-     (catch clojure.lang.ExceptionInfo e
-       (println "there is an error" e)))))
+  (a/go
+    (try
+      (->> (?do-some-more-stuff)
+           (a/<!)
+           (println "success"))
+      (catch #?(:clj clojure.lang.ExceptionInfo
+                :cljs ExceptionInfo) e
+        (println "there is an error" e)))))
 ```
 
 

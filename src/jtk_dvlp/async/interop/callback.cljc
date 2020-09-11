@@ -50,7 +50,7 @@
                 (fail [:nope value-to-carry])
                 (success [:yeah value-to-carry])))]
 
-        (go*
+        (go
          (try
            (-> (callback-based-fn
                 5 true

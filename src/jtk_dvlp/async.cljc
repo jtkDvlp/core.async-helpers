@@ -12,13 +12,20 @@
 
      :cljs
      (:require
-      [cljs.core.async :as async]))
+      [cljs.core.async :as async]
+      [cljs.core.async.impl.channels :refer [ManyToManyChannel]]))
 
   #?(:clj
      (:import
-      [clojure.lang ExceptionInfo]))
+      [clojure.lang ExceptionInfo]
+      [clojure.core.async.impl.channels ManyToManyChannel]))
 
   ,,,)
+
+(defn chan?
+  "Checks `x` of type channel (`clojure.core.async.impl.channels/ManyToManyChannel` / `cljs.core.async.impl.channels/ManyToManyChannel`)."
+  [x]
+  (instance? ManyToManyChannel x))
 
 #?(:clj
    (defmacro go
@@ -59,6 +66,15 @@
           (if (instance? clojure.lang.ExceptionInfo v#)
             (throw v#)
             v#)))))
+
+#?(:clj
+   (defmacro <?
+     "Like `<!` but can handle channels and non channel values."
+     [sync-or-async-exp]
+     `(let [r# ~sync-or-async-exp]
+        (if (chan? r#)
+          (jtk-dvlp.async/<! r#)
+          r#))))
 
 (defn map
   "Like `core.async/map` but carries thrown `ExceptionInfo` as result."

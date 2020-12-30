@@ -1,6 +1,6 @@
 (ns jtk-dvlp.async
   (:refer-clojure
-   :exclude [map])
+   :exclude [map reduce into])
 
   #?(:cljs
      (:require-macros
@@ -76,15 +76,41 @@
           (jtk-dvlp.async/<! r#)
           r#))))
 
+(def ^:private exception?
+  (partial instance? ExceptionInfo))
+
 (defn map
   "Like `core.async/map` but carries thrown `ExceptionInfo` as result."
   [f chs]
   (async/map
    (fn [& args]
      (try
+       (when-let [e (first (filter exception? args))]
+         (throw e))
        (apply f args)
        (catch ExceptionInfo e
          e)
        (catch #?(:clj Throwable :cljs js/Error) e
          (ex-info "error" {:error :unknown} e))))
    chs))
+
+
+(defn reduce
+  "Like `core.async/reduce` but carries thrown `ExceptionInfo` as result."
+  [f init ch]
+  (async/reduce
+   (fn [accu v]
+     (try
+       (when (exception? v)
+         (throw v))
+       (f accu v)
+       (catch ExceptionInfo e
+         (reduced e))
+       (catch #?(:clj Throwable :cljs js/Error) e
+         (reduced (ex-info "error" {:error :unknown} e)))))
+   init ch))
+
+(defn into
+  "Like `core.async/into` but carries thrown `ExceptionInfo` as result."
+  [coll ch]
+  (reduce conj coll ch))

@@ -65,12 +65,12 @@
   [c]
   (create-promise
    (fn [resolve reject]
-     (async/go
-       (let [v (async/<! c)]
-         (async/close! c)
-         (if (instance? ExceptionInfo v)
-           (reject v)
-           (resolve v)))))))
+     (->> (fn [v]
+            (async/close! c)
+            (if (instance? ExceptionInfo v)
+              (reject v)
+              (resolve v)))
+          (async/take! c)))))
 
 (defn promise-chan
   "Creates an promise like channel, see `core.async/promise-chan`.
@@ -99,10 +99,13 @@
 (defn ->promise-chan
   "Ensure given channel `c` to be a `promise-chan` via
    `pipe` it into a new `promise-chan`. See `core.async/promise-chan`
-   for more infos."
+   for more infos. Auto close channel `c`."
   [c]
-  (->> (async/promise-chan)
-       (async/pipe c)))
+  (let [p (async/promise-chan)]
+    (->> (fn [v]
+           (async/put! p v)
+           (async/close! c))
+         (async/take! c))))
 
 #?(:clj
    (defmacro promise-go

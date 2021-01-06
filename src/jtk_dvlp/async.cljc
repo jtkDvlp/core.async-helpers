@@ -37,7 +37,7 @@
             ~@body
             (catch cljs.core/ExceptionInfo e#
               e#)
-            (catch js/Error e#
+            (catch :default e#
               (ex-info "error" {:error :unknown} e#))))
        `(clojure.core.async/go
           (try
@@ -71,10 +71,10 @@
    (defmacro <?
      "Like `<!` but can handle channels and non channel values."
      [sync-or-async-exp]
-     `(let [r# ~sync-or-async-exp]
-        (if (chan? r#)
-          (jtk-dvlp.async/<! r#)
-          r#))))
+     `(let [v# ~sync-or-async-exp]
+        (if (chan? v#)
+          (jtk-dvlp.async/<! v#)
+          v#))))
 
 (def ^:private exception?
   (partial instance? ExceptionInfo))
@@ -90,7 +90,7 @@
        (apply f args)
        (catch ExceptionInfo e
          e)
-       (catch #?(:clj Throwable :cljs js/Error) e
+       (catch #?(:clj Throwable :cljs :default) e
          (ex-info "error" {:error :unknown} e))))
    chs))
 
@@ -106,7 +106,7 @@
        (f accu v)
        (catch ExceptionInfo e
          (reduced e))
-       (catch #?(:clj Throwable :cljs js/Error) e
+       (catch #?(:clj Throwable :cljs :default) e
          (reduced (ex-info "error" {:error :unknown} e)))))
    init ch))
 

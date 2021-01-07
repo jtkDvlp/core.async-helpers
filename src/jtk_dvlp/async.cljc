@@ -4,7 +4,7 @@
 
   #?(:cljs
      (:require-macros
-      [jtk-dvlp.async :refer [go go-loop <!]]))
+      [jtk-dvlp.async :refer [go go-loop <! <?]]))
 
   #?(:clj
      (:require
@@ -17,10 +17,10 @@
 
   #?(:clj
      (:import
-      [clojure.lang ExceptionInfo]
       [clojure.core.async.impl.channels ManyToManyChannel]))
 
   ,,,)
+
 
 (defn chan?
   "Checks `x` of type channel (`clojure.core.async.impl.channels/ManyToManyChannel` / `cljs.core.async.impl.channels/ManyToManyChannel`)."
@@ -28,8 +28,18 @@
   (instance? ManyToManyChannel x))
 
 #?(:clj
+   (defn exception?
+     [x]
+     (instance? Throwable x))
+
+   :cljs
+   (defn exception?
+     [x]
+     (some #(instance? % x) [cljs.core.ExceptionInfo js/Error])))
+
+#?(:clj
    (defmacro go
-     "Like `core.async/go` but carries thrown `ExceptionInfo` as result."
+     "Like `core.async/go` but carries thrown exception as result."
      [& body]
      (if (:ns &env)
        `(cljs.core.async/go
@@ -37,33 +47,35 @@
             ~@body
             (catch cljs.core/ExceptionInfo e#
               e#)
+            (catch js/Error e#
+              e#)
             (catch :default e#
               (ex-info "error" {:error :unknown} e#))))
        `(clojure.core.async/go
           (try
             ~@body
-            (catch clojure.lang.ExceptionInfo e#
-              e#)
             (catch Throwable e#
-              (ex-info "error" {:error :unknown} e#)))))))
+              e#))))))
 
 #?(:clj
    (defmacro go-loop
-     "Like `core.async/go-loop` but carries thrown `ExceptionInfo` as result."
+     "Like `core.async/go-loop` but carries thrown exception as result."
      [bindings & body]
-     `(jtk-dvlp.async/go (loop ~bindings ~@body))))
+     `(jtk-dvlp.async/go
+        (loop ~bindings
+          ~@body))))
 
 #?(:clj
    (defmacro <!
-     "Like `core.async/<!` but tests taken val instance of `ExceptionInfo`, if so throws it."
+     "Like `core.async/<!` but tests taken val instance of exception, if so throws it."
      [?exp]
      (if (:ns &env)
        `(let [v# (cljs.core.async/<! ~?exp)]
-          (if (instance? cljs.core/ExceptionInfo v#)
+          (if (exception? v#)
             (throw v#)
             v#))
        `(let [v# (clojure.core.async/<! ~?exp)]
-          (if (instance? clojure.lang.ExceptionInfo v#)
+          (if (exception? v#)
             (throw v#)
             v#)))))
 
@@ -76,41 +88,57 @@
           (jtk-dvlp.async/<! v#)
           v#))))
 
-(def ^:private exception?
-  (partial instance? ExceptionInfo))
-
 (defn map
-  "Like `core.async/map` but carries thrown `ExceptionInfo` as result."
+  "Like `core.async/map` but carries thrown exception as result."
   [f chs]
   (async/map
    (fn [& args]
-     (try
-       (when-let [e (first (filter exception? args))]
-         (throw e))
-       (apply f args)
-       (catch ExceptionInfo e
-         e)
-       (catch #?(:clj Throwable :cljs :default) e
-         (ex-info "error" {:error :unknown} e))))
+     #?(:clj
+        (try
+          (when-let [e (first (filter exception? args))]
+            (throw e))
+          (apply f args)
+          (catch Throwable e#
+            e#))
+        :cljs
+        (try
+          (when-let [e (first (filter exception? args))]
+            (throw e))
+          (apply f args)
+          (catch cljs.core/ExceptionInfo e#
+            e#)
+          (catch js/Error e#
+            e#)
+          (catch :default e#
+            (ex-info "error" {:error :unknown} e#)))))
    chs))
 
-
 (defn reduce
-  "Like `core.async/reduce` but carries thrown `ExceptionInfo` as result."
+  "Like `core.async/reduce` but carries thrown exception as result."
   [f init ch]
   (async/reduce
    (fn [accu v]
-     (try
-       (when (exception? v)
-         (throw v))
-       (f accu v)
-       (catch ExceptionInfo e
-         (reduced e))
-       (catch #?(:clj Throwable :cljs :default) e
-         (reduced (ex-info "error" {:error :unknown} e)))))
+     #?(:clj
+        (try
+          (when (exception? v)
+            (throw v))
+          (f accu v)
+          (catch Throwable e#
+            (reduced e#)))
+        :cljs
+        (try
+          (when (exception? v)
+            (throw v))
+          (f accu v)
+          (catch cljs.core/ExceptionInfo e#
+            (reduced e#))
+          (catch js/Error e#
+            (reduced e#))
+          (catch :default e#
+            (reduced (ex-info "error" {:error :unknown} e#))))))
    init ch))
 
 (defn into
-  "Like `core.async/into` but carries thrown `ExceptionInfo` as result."
+  "Like `core.async/into` but carries thrown exception as result."
   [coll ch]
   (reduce conj coll ch))

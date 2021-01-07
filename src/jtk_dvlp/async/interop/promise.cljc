@@ -67,7 +67,7 @@
    (fn [resolve reject]
      (->> (fn [v]
             (async/close! c)
-            (if (instance? ExceptionInfo v)
+            (if (jtk-dvlp.async/exception? v)
               (reject v)
               (resolve v)))
           (async/take! c)))))
@@ -102,10 +102,12 @@
    for more infos. Auto close channel `c`."
   [c]
   (let [p (async/promise-chan)]
-    (->> (fn [v]
-           (async/put! p v)
-           (async/close! c))
-         (async/take! c))))
+    (async/take!
+     c (fn [v]
+         (when (some? v)
+           (async/put! p v))
+         (async/close! p)))
+    p))
 
 #?(:clj
    (defmacro promise-go

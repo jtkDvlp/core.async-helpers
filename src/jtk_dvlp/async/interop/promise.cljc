@@ -11,11 +11,7 @@
      :cljs
      (:require
       [cljs.core.async :as async]
-      [jtk-dvlp.async]))
-
-  #?(:clj
-     (:import
-      [clojure.lang ExceptionInfo])))
+      [jtk-dvlp.async])))
 
 
 (defn p->c
@@ -60,8 +56,7 @@
 
 (defn c->p
   "Creates a promise and resolves it with the val of channel `c`
-   taken by `<!`, excepted val is an instance of `ExceptionInfo` rejects the
-   promise. Closes the channel after took val."
+   taken by `<!` or rejects it on error / exception. Closes the channel after took val."
   [c]
   (create-promise
    (fn [resolve reject]
@@ -97,9 +92,9 @@
      c)))
 
 (defn ->promise-chan
-  "Ensure given channel `c` to be a `promise-chan` via
-   `pipe` it into a new `promise-chan`. See `core.async/promise-chan`
-   for more infos. Auto close channel `c`."
+  "Ensure given channel `c` to be a `promise-chan`.
+   See `core.async/promise-chan` for more infos.
+   Auto closes channel `c`."
   [c]
   (let [p (async/promise-chan)]
     (async/take!

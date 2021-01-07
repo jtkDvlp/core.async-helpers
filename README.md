@@ -75,8 +75,8 @@ Add the following dependency to your `project.clj`:<br>
       (->> (?do-some-more-stuff)
            (a/<!)
            (println "success"))
-      (catch #?(:clj clojure.lang.ExceptionInfo
-                :cljs ExceptionInfo) e
+      (catch #?(:clj Throwable
+                :cljs :default) e
         (println "there is an error" e)))))
 ```
 

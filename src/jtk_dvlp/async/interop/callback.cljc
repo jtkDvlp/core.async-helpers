@@ -36,7 +36,7 @@
       closing the channel! Otherwise channel will be closed after first put
       (resolve or reject).
 
-      If calling `exp` fails an `ExceptionInfo` will be put onto the
+      If calling `exp` fails an error / exception will be put onto the
       new created channel with fail information. The channel will be
       closed then.
 
@@ -64,7 +64,7 @@
                (<cb!)
                (println))
 
-           (catch clojure.lang.ExceptionInfo e
+           (catch Throwable e
          (println e)))))
       ```"
 

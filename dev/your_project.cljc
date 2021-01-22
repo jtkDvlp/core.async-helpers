@@ -7,7 +7,12 @@
      :cljs
      (:require
       [cljs.core.async :refer [timeout]]
-      [jtk-dvlp.async :as a])))
+      [jtk-dvlp.async :as a]))
+
+  #?(:clj
+     (:import
+      [clojure.lang ExceptionInfo]))
+  )
 
 
 (defn ?do-some-async-stuff
@@ -48,6 +53,6 @@
       (->> (?do-some-more-stuff)
            (a/<!)
            (println "success"))
-      (catch #?(:clj Throwable
+      (catch #?(:clj ExceptionInfo
                 :cljs :default) e
         (println "there is an error" e)))))

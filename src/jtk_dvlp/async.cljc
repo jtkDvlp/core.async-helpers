@@ -46,7 +46,7 @@
        `(clojure.core.async/go
           (try
             ~@body
-            (catch clojure.lang/ExceptionInfo e#
+            (catch clojure.lang.ExceptionInfo e#
               e#)
             (catch Throwable e#
               (ex-info "unknown" {:code :unknown} e#)))))))

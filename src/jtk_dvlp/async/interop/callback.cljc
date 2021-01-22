@@ -145,7 +145,7 @@
 
              (try
                (~f ~@forms')
-               (catch clojure.lang/ExceptionInfo e#
+               (catch clojure.lang.ExceptionInfo e#
                  (clojure.core.async/put! c# e#)
                  (clojure.core.async/close! c#))
                (catch Throwable e#

@@ -64,7 +64,7 @@
                (<cb!)
                (println))
 
-           (catch Throwable e
+           (catch ExceptionInfo e
          (println e)))))
       ```"
 
@@ -108,7 +108,7 @@
                  ~put-rejection!
                  (fn [x#]
                    (->> x#
-                        (ex-info "callback error" {:error :callback-error})
+                        (ex-info "callback error" {:code :callback-error})
                         (cljs.core.async/put! c#))
                    (auto-close!#))]
 
@@ -117,12 +117,9 @@
                (catch cljs.core/ExceptionInfo e#
                  (cljs.core.async/put! c# e#)
                  (cljs.core.async/close! c#))
-               (catch js/Error e#
-                 (cljs.core.async/put! c# e#)
-                 (cljs.core.async/close! c#))
                (catch :default e#
                  (cljs.core.async/put!
-                  c# (ex-info "callback based function error" {:error :callback-based-function-error} e#))
+                  c# (ex-info "callback based function error" {:code :callback-based-function-error} e#))
                  (cljs.core.async/close! c#)))
              c#)
 
@@ -142,14 +139,18 @@
                  ~put-rejection!
                  (fn [x#]
                    (->> x#
-                        (ex-info "callback error" {:error :callback-error})
+                        (ex-info "callback error" {:code :callback-error})
                         (clojure.core.async/put! c#))
                    (auto-close!#))]
 
              (try
                (~f ~@forms')
-               (catch Throwable e#
+               (catch clojure.lang/ExceptionInfo e#
                  (clojure.core.async/put! c# e#)
+                 (clojure.core.async/close! c#))
+               (catch Throwable e#
+                 (clojure.core.async/put!
+                  c# (ex-info "callback based function error" {:code :callback-based-function-error} e#))
                  (clojure.core.async/close! c#)))
              c#))))))
 

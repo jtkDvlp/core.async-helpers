@@ -30,7 +30,7 @@
         forward-error!
         (fn [err]
           (->> err
-               (ex-info "promise error" {:error :promise-error})
+               (ex-info "promise error" {:code :promise-error})
                (async/put! c)))]
 
     #?(:clj
@@ -85,7 +85,7 @@
 
          put-rejection!
          #(->> %
-               (ex-info "promise error" {:error :promise-error})
+               (ex-info "promise error" {:code :promise-error})
                (async/put! c))]
 
      (f put-resolution! put-rejection!)

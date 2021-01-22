@@ -17,6 +17,7 @@
 
   #?(:clj
      (:import
+      [clojure.lang ExceptionInfo]
       [clojure.core.async.impl.channels ManyToManyChannel]))
 
   ,,,)
@@ -26,15 +27,9 @@
   [x]
   (instance? ManyToManyChannel x))
 
-#?(:clj
-   (defn exception?
-     [x]
-     (instance? Throwable x))
-
-   :cljs
-   (defn exception?
-     [x]
-     (some #(instance? % x) [cljs.core.ExceptionInfo js/Error])))
+(defn exception?
+  [x]
+  (instance? ExceptionInfo x))
 
 #?(:clj
    (defmacro go
@@ -46,15 +41,15 @@
             ~@body
             (catch cljs.core/ExceptionInfo e#
               e#)
-            (catch js/Error e#
-              e#)
             (catch :default e#
-              (ex-info "error" {:error :unknown} e#))))
+              (ex-info "unknown" {:code :unknown} e#))))
        `(clojure.core.async/go
           (try
             ~@body
+            (catch clojure.lang/ExceptionInfo e#
+              e#)
             (catch Throwable e#
-              e#))))))
+              (ex-info "unknown" {:code :unknown} e#)))))))
 
 #?(:clj
    (defmacro go-loop
@@ -92,24 +87,14 @@
   [f chs]
   (async/map
    (fn [& args]
-     #?(:clj
-        (try
-          (when-let [e (first (filter exception? args))]
-            (throw e))
-          (apply f args)
-          (catch Throwable e#
-            e#))
-        :cljs
-        (try
-          (when-let [e (first (filter exception? args))]
-            (throw e))
-          (apply f args)
-          (catch cljs.core/ExceptionInfo e#
-            e#)
-          (catch js/Error e#
-            e#)
-          (catch :default e#
-            (ex-info "error" {:error :unknown} e#)))))
+     (try
+       (when-let [e (first (filter exception? args))]
+         (throw e))
+       (apply f args)
+       (catch ExceptionInfo e#
+         e#)
+       (catch #?(:cljs :default :clj Throwable) e#
+         (ex-info "unknown" {:code :unknown} e#))))
    chs))
 
 (defn reduce
@@ -117,24 +102,14 @@
   [f init ch]
   (async/reduce
    (fn [accu v]
-     #?(:clj
-        (try
-          (when (exception? v)
-            (throw v))
-          (f accu v)
-          (catch Throwable e#
-            (reduced e#)))
-        :cljs
-        (try
-          (when (exception? v)
-            (throw v))
-          (f accu v)
-          (catch cljs.core/ExceptionInfo e#
-            (reduced e#))
-          (catch js/Error e#
-            (reduced e#))
-          (catch :default e#
-            (reduced (ex-info "error" {:error :unknown} e#))))))
+     (try
+       (when (exception? v)
+         (throw v))
+       (f accu v)
+       (catch ExceptionInfo e#
+         (reduced e#))
+       (catch #?(:cljs :default :clj Throwable) e#
+         (reduced (ex-info "unknown" {:code :unknown} e#)))))
    init ch))
 
 (defn into

@@ -56,7 +56,7 @@
 
 (defn c->p
   "Creates a promise and resolves it with the val of channel `c`
-   taken by `<!` or rejects it on error / exception. Closes the channel after took val."
+   taken by `<!` or rejects it on exception (`ExceptionInfo`). Closes the channel after took val."
   [c]
   (create-promise
    (fn [resolve reject]
@@ -73,7 +73,7 @@
    Given function `f` can be used to fill the promise.
    `f` will be called with one arg functions `resolve` and `reject`
    to resolve or reject the created promise. Rejection value will
-   will be used as `ex-info` `cause`."
+   be wrapped in `ExceptionInfo` as `cause`."
   ([]
    (async/promise-chan))
 

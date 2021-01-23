@@ -33,7 +33,7 @@
 
 #?(:clj
    (defmacro go
-     "Like `core.async/go` but carries thrown error / exception as result."
+     "Like `core.async/go` but carries thrown exception (will convert to `ExceptionInfo`) as result."
      [& body]
      (if (:ns &env)
        `(cljs.core.async/go
@@ -53,7 +53,7 @@
 
 #?(:clj
    (defmacro go-loop
-     "Like `core.async/go-loop` but carries thrown error / exception as result."
+     "Like `core.async/go-loop` but carries thrown exception (will convert to `ExceptionInfo`) as result."
      [bindings & body]
      `(jtk-dvlp.async/go
         (loop ~bindings
@@ -61,7 +61,7 @@
 
 #?(:clj
    (defmacro <!
-     "Like `core.async/<!` but tests taken val of error / exception, if so throws it."
+     "Like `core.async/<!` but tests taken val of exception (`ExceptionInfo`), if so throws it."
      [?exp]
      (if (:ns &env)
        `(let [v# (cljs.core.async/<! ~?exp)]
@@ -83,7 +83,7 @@
           v#))))
 
 (defn map
-  "Like `core.async/map` but carries thrown error / exception as result."
+  "Like `core.async/map` but carries thrown exception (will convert to `ExceptionInfo`) as result."
   [f chs]
   (async/map
    (fn [& args]
@@ -98,7 +98,7 @@
    chs))
 
 (defn reduce
-  "Like `core.async/reduce` but carries thrown error / exception as result."
+  "Like `core.async/reduce` but carries thrown exception (will convert to `ExceptionInfo`) as result."
   [f init ch]
   (async/reduce
    (fn [accu v]
@@ -113,6 +113,6 @@
    init ch))
 
 (defn into
-  "Like `core.async/into` but carries thrown error / exception as result."
+  "Like `core.async/into` but carries thrown exception (will convert to `ExceptionInfo`) as result."
   [coll ch]
   (reduce conj coll ch))

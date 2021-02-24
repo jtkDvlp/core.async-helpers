@@ -24,6 +24,8 @@ Add the following dependency to your `project.clj`:<br>
 
 ### Usage
 
+Pay attention mixing up error propagation functions of this library and clojure.core.async functions. clojure.core.async function do not propagate errors. E.g. using a core.async go-block within a error propagation go-block stack will break error propagation. So do not mix it up!
+
 ```clojure
 (ns your-project
   #?(:clj
@@ -34,10 +36,16 @@ Add the following dependency to your `project.clj`:<br>
      :cljs
      (:require
       [cljs.core.async :refer [timeout]]
-      [jtk-dvlp.async :as a])))
+      [jtk-dvlp.async :as a]))
+
+  #?(:clj
+     (:import
+      [clojure.lang ExceptionInfo]))
+
+  ,,,)
 
 
-(defn ?do-some-async-stuff
+(defn <do-some-async-stuff
   [& args]
   (a/go
     (a/<! (timeout 1000))
@@ -47,7 +55,7 @@ Add the following dependency to your `project.clj`:<br>
       (println result)
       result)))
 
-(defn ?fail-during-some-async-stuff
+(defn <fail-during-some-async-stuff
   [& args]
   (a/go
     (a/<! (timeout 1000))
@@ -55,29 +63,24 @@ Add the following dependency to your `project.clj`:<br>
          (ex-info "you got a bug")
          (throw))))
 
-(defn ?do-some-more-stuff
-  []
-  (a/go
-    (let [a
-          (a/<! (?do-some-async-stuff :a))
-
-          b
-          (a/<! (?fail-during-some-async-stuff :b))
-
-          c
-          (a/<! (?do-some-async-stuff :c))]
-
-      [a b c])))
-
 (comment
   (a/go
     (try
-      (->> (?do-some-more-stuff)
-           (a/<!)
-           (println "success"))
-      (catch #?(:clj Throwable
-                :cljs :default) e
-        (println "there is an error" e)))))
+      (let [a
+            (a/<! (<do-some-async-stuff :a))
+
+            b
+            (a/<! (<fail-during-some-async-stuff :b))
+
+            c
+            (a/<! (<do-some-async-stuff :c))]
+
+        (println [a b c]))
+
+      (catch ExceptionInfo e
+        (println "there is an error" e))))
+
+  ,,,)
 ```
 
 

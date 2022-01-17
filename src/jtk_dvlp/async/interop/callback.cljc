@@ -80,7 +80,8 @@
 
             marks-given?
             (->> forms
-                 (flatten)
+                 (tree-seq coll? seq)
+                 (filter symbol?)
                  (some #{'callback 'resolve 'reject}))
 
             forms'

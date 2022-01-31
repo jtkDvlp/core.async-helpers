@@ -1,4 +1,4 @@
-(defproject jtk-dvlp/core.async-helpers "3.0.1"
+(defproject jtk-dvlp/core.async-helpers "3.0.1-SNAPSHOT"
   :description
   "Helper pack for core.async"
 

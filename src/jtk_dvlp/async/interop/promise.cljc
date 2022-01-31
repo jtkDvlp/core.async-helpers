@@ -22,16 +22,17 @@
   (let [c (async/promise-chan)
 
         put-val!
-        (fn [val]
-          (if (nil? val)
-            (async/close! c)
-            (async/put! c val)))
+        (fn [v]
+          (when (some? v)
+            (async/put! c v))
+          (async/close! c))
 
         forward-error!
-        (fn [err]
-          (->> err
+        (fn [e]
+          (->> e
                (ex-info "promise error" {:code :promise-error})
-               (async/put! c)))]
+               (async/put! c))
+          (async/close! c))]
 
     #?(:clj
        (try
@@ -60,12 +61,13 @@
   [c]
   (create-promise
    (fn [resolve reject]
-     (->> (fn [v]
-            (async/close! c)
-            (if (jtk-dvlp.async/exception? v)
-              (reject v)
-              (resolve v)))
-          (async/take! c)))))
+     (async/take!
+      c
+      (fn [v]
+        (async/close! c)
+        (if (jtk-dvlp.async/exception? v)
+          (reject v)
+          (resolve v)))))))
 
 (defn promise-chan
   "Creates an promise like channel, see `core.async/promise-chan`.
@@ -78,18 +80,23 @@
    (async/promise-chan))
 
   ([f]
-   (let [c (async/promise-chan)
+   (let [p (async/promise-chan)
 
          put-resolution!
-         (partial async/put! c)
+         (fn [v]
+           (when (some? v)
+             (async/put! p v))
+           (async/close! p))
 
          put-rejection!
-         #(->> %
-               (ex-info "promise error" {:code :promise-error})
-               (async/put! c))]
+         (fn [e]
+           (->> e
+                (ex-info "promise error" {:code :promise-error})
+                (async/put! p))
+           (async/close! p))]
 
      (f put-resolution! put-rejection!)
-     c)))
+     p)))
 
 (defn ->promise-chan
   "Ensure given channel `c` to be a `promise-chan`.
@@ -98,10 +105,12 @@
   [c]
   (let [p (async/promise-chan)]
     (async/take!
-     c (fn [v]
-         (when (some? v)
-           (async/put! p v))
-         (async/close! p)))
+     c
+     (fn [v]
+       (async/close! c)
+       (when (some? v)
+         (async/put! p v))
+       (async/close! p)))
     p))
 
 #?(:clj

@@ -1,6 +1,6 @@
 (ns jtk-dvlp.async
   (:refer-clojure
-   :exclude [map reduce into])
+   :exclude [map pmap amap reduce into])
 
   #?(:cljs
      (:require-macros
@@ -116,3 +116,33 @@
   "Like `core.async/into` but carries thrown exception (will convert to `ExceptionInfo`) as result."
   [coll ch]
   (reduce conj coll ch))
+
+(defn smap
+  "Applies async function `<f` on every item of seqs `xs` *chaining its execution to make sure its run sequentially*. All seqs of `xs` must have the same length. Returns vector of all results applying `<f`. Supports error handling.
+
+  Also see `amap`"
+  [<f & xs]
+  (go-loop [result [], xs xs]
+    (if (ffirst xs)
+      (do
+        (let [next-result
+              (->> xs
+                   (mapv first)
+                   (apply <f)
+                   (<!))]
+
+          (recur
+           (conj result next-result)
+           (mapv next xs))))
+
+      result)))
+
+(def chain smap)
+
+(defn- amap
+  "Applies async function `<f` on every item of seqs `xs`. All seqs of `xs` must have the same length. Returns vector of all results applying `<f`. Supports error handling.
+
+  Also see `smap`"
+  [<f & xs]
+  (->> (apply clojure.core/map <f xs)
+       (map vector)))

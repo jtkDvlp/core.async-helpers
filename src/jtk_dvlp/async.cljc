@@ -139,7 +139,7 @@
 
 (def chain smap)
 
-(defn- amap
+(defn amap
   "Applies async function `<f` on every item of seqs `xs`. All seqs of `xs` must have the same length. Returns vector of all results applying `<f`. Supports error handling.
 
   Also see `smap`"

@@ -41,7 +41,7 @@
            (forward-error! e)))
 
        :cljs
-       (.then p put-val! forward-error!))
+       (js-invoke p "then" put-val! forward-error!))
     c))
 
 (def ^:private create-promise

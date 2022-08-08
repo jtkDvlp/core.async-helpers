@@ -97,6 +97,11 @@
          (ex-info "unknown" {:code :unknown} e#))))
    chs))
 
+(defn all
+  "Alias for `(map vector chs)` providing an vector of all resolved values."
+  [chs]
+  (map vector chs))
+
 (defn smap
   "Like `clojure.core/map` but given function `<f` is async. Execution of `<f` with values of `xs` will be sequential with the given order of `xs`. Carries thrown exception (will convert to `ExceptionInfo`) as result.
 

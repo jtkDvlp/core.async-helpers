@@ -22,14 +22,13 @@
   ^{:protect false}
   [:target-path]
 
-  :profiles
-  {:provided
-   {:dependencies
-    [[org.clojure/clojure "1.10.0"]
-     [org.clojure/clojurescript "1.10.773"]
-     [org.clojure/core.async "1.2.603"]]}
+  :dependencies
+  [[org.clojure/clojure "1.10.0"]
+   [org.clojure/clojurescript "1.10.773"]
+   [org.clojure/core.async "1.3.610"]]
 
-   :dev
+  :profiles
+  {:dev
    {:dependencies
     [[com.bhauman/figwheel-main "0.2.7"]]
 

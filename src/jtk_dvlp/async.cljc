@@ -102,6 +102,12 @@
   [chs]
   (map vector chs))
 
+(defn consume
+  "Consumes channel `ch` executing function `f` for every value on channel. Execution will be asynchron, call returns immediately with `nil`."
+  [ch f]
+  (map f ch)
+  nil)
+
 (defn smap
   "Like `clojure.core/map` but given function `<f` is async. Execution of `<f` with values of `xs` will be sequential with the given order of `xs`. Carries thrown exception (will convert to `ExceptionInfo`) as result.
 

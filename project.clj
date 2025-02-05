@@ -23,21 +23,21 @@
   [:target-path]
 
   :dependencies
-  [[org.clojure/clojure "1.10.0"]
-   [org.clojure/clojurescript "1.10.773"]
+  [[org.clojure/clojure "1.11.3"]
+   [org.clojure/clojurescript "1.11.132"]
    [org.clojure/core.async "1.3.610"]]
 
   :profiles
   {:dev
    {:dependencies
-    [[com.bhauman/figwheel-main "0.2.7"]]
+    [[com.bhauman/figwheel-main "0.2.18"]]
 
     :source-paths
     ["dev"]}
 
    :repl
    {:dependencies
-    [[cider/piggieback "0.5.0"]]
+    [[cider/piggieback "0.5.3"]]
 
     :repl-options
     {:nrepl-middleware

@@ -183,7 +183,7 @@
   (go
     (cond
       (list? form)
-      (<outer (apply list (<! (amap <inner form))))
+      (<! (<outer (apply list (<! (amap <inner form)))))
 
       #?(:cljs (map-entry? form) :clj (instance? clojure.lang.IMapEntry form))
       (do

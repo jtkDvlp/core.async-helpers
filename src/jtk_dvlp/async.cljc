@@ -103,7 +103,7 @@
   (map vector chs))
 
 (defn consume!
-  "Consumes channel `ch` executing function `f` for every value on channel. Spawns a new thread for Execution. Execution will be asynchron. Call returns immediately with `nil`."
+  "Consumes channel `ch` executing function `f` for every value on channel. Spawns a new thread for execution on the JVM. Execution will be asynchron. Call returns immediately with `nil`. Thrown exceptions will abort consume."
   [ch f]
   #?(:clj
      (future
@@ -113,7 +113,10 @@
            (recur (async/<!! ch)))))
 
      :cljs
-     (map f ch))
+     (async/go-loop [val (async/<! ch)]
+       (when val
+         (f val)
+         (recur (async/<! ch)))))
   nil)
 
 (defn smap

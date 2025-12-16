@@ -128,3 +128,11 @@
      `(jtk-dvlp.async/<!
        (jtk-dvlp.async.interop.promise/p->c
         ~?exp))))
+
+#?(:clj
+   (defmacro <p!!
+     "Like `<!!` for promise via `p->c` convertion."
+     [?exp]
+     `(jtk-dvlp.async/<!!
+       (jtk-dvlp.async.interop.promise/p->c
+        ~?exp))))

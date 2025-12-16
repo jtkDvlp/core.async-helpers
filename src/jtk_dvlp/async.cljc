@@ -74,13 +74,41 @@
             v#)))))
 
 #?(:clj
-   (defmacro <?
+   (defmacro <!!
+     "Like `core.async/<!!` but tests taken val of exception (`ExceptionInfo`), if so throws it."
+     [?exp]
+     (if (:ns &env)
+       `(throw (js/Error. "Unsupported"))
+       `(let [v# (clojure.core.async/<!! ~?exp)]
+          (if (exception? v#)
+            (throw v#)
+            v#)))))
+
+#?(:clj
+   (defmacro <?!
      "Like `<!` but can handle channels and non channel values."
      [sync-or-async-exp]
      `(let [v# ~sync-or-async-exp]
         (if (chan? v#)
           (jtk-dvlp.async/<! v#)
           v#))))
+
+#?(:clj
+   (defmacro <?
+     "Like `<!` but can handle channels and non channel values."
+     [sync-or-async-exp]
+     `(<?! ~sync-or-async-exp)))
+
+#?(:clj
+   (defmacro <?!!
+     "Like `<!!` but can handle channels and non channel values."
+     [sync-or-async-exp]
+     (if (:ns &env)
+       `(throw (js/Error. "Unsupported"))
+       `(let [v# ~sync-or-async-exp]
+          (if (chan? v#)
+            (jtk-dvlp.async/<!! v#)
+            v#)))))
 
 (defn map
   "Like `core.async/map` but carries thrown exception (will convert to `ExceptionInfo`) as result."

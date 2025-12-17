@@ -4,7 +4,7 @@
 
   #?(:cljs
      (:require-macros
-      [jtk-dvlp.async :refer [go go-loop <! <?]]))
+      [jtk-dvlp.async :refer [go go-loop <! <?! <?]]))
 
   #?(:clj
      (:require
@@ -109,6 +109,31 @@
           (if (chan? v#)
             (jtk-dvlp.async/<!! v#)
             v#)))))
+
+#?(:clj
+   (defn thread-call
+     "Like `core.async/thread-call` but carries thrown exception (will convert to `ExceptionInfo`) as result."
+     ([f]
+      (thread-call f :mixed))
+
+     ([f workload]
+      (async/thread-call
+       (fn []
+         (try
+           (f)
+           (catch clojure.lang.ExceptionInfo e
+             e)
+           (catch Throwable e
+             (ex-info "unknown" {:code :unknown} e))))
+       workload))))
+
+#?(:clj
+   (defmacro thread
+     "Like `core.async/thread` but carries thrown exception (will convert to `ExceptionInfo`) as result."
+     [& body]
+     (if (:ns &env)
+       `(throw (js/Error. "Unsupported"))
+       `(jtk-dvlp.async/thread-call (^:once fn* [] ~@body) :mixed))))
 
 (defn map
   "Like `core.async/map` but carries thrown exception (will convert to `ExceptionInfo`) as result."

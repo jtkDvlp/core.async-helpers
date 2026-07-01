@@ -94,7 +94,7 @@
           v#))))
 
 #?(:clj
-   (defmacro <?
+   (defmacro ^:deprecated <?
      "Like `<!` but can handle channels and non channel values."
      [sync-or-async-exp]
      `(<?! ~sync-or-async-exp)))

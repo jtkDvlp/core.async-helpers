@@ -1,4 +1,4 @@
-(defproject jtk-dvlp/core.async-helpers "3.5.0"
+(defproject jtk-dvlp/core.async-helpers "4.0.0-SNAPSHOT"
   :description
   "Helper pack for core.async"
 
@@ -12,6 +12,9 @@
    :url
    "https://www.eclipse.org/legal/epl-2.0/"}
 
+  :plugins
+  [[lein-ancient "0.7.0"]]
+
   :source-paths
   ["src"]
 
@@ -23,21 +26,23 @@
   [:target-path]
 
   :dependencies
-  [[org.clojure/clojure "1.11.3"]
-   [org.clojure/clojurescript "1.11.132"]
-   [org.clojure/core.async "1.3.610"]]
+  [[org.clojure/core.async "1.9.865"]]
 
   :profiles
-  {:dev
+  {:provided
    {:dependencies
-    [[com.bhauman/figwheel-main "0.2.18"]]
+    [[org.clojure/clojure "1.12.5"]]}
+
+   :dev
+   {:dependencies
+    [[com.bhauman/figwheel-main "0.2.20"]]
 
     :source-paths
     ["dev"]}
 
    :repl
    {:dependencies
-    [[cider/piggieback "0.5.3"]]
+    [[cider/piggieback "0.7.0"]]
 
     :repl-options
     {:nrepl-middleware

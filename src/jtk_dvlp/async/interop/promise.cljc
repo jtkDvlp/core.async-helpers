@@ -36,7 +36,10 @@
 
     #?(:clj
        (try
-         (put-val! @p)
+         ;; WATCHOUT: There is no `then`-like api for `promise`.
+         ;;           To not blocking the calling thread spwan
+         ;;           a new thread / future waiting for delivery.
+         (future (put-val! @p))
          (catch Throwable e
            (forward-error! e)))
 

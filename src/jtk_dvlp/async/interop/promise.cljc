@@ -14,6 +14,25 @@
       [jtk-dvlp.async])))
 
 
+(defn- put-n-close!
+  [c v]
+  (when (some? v)
+    (async/put! c v))
+  (async/close! c))
+
+(defn- forward-value!
+  [c v]
+  (put-n-close! c v))
+
+(defn- forward-error!
+  [c e]
+  (cond->> e
+    (not (jtk-dvlp.async/exception? e))
+    (ex-info "promise error" {:code :promise-error})
+
+    :always
+    (put-n-close! c)))
+
 (defn p->c
   "Creates a `promise-chan` and put the val of resolved promise `p`
    or put an instance of `ExceptionInfo` if promise is rejected.
@@ -21,30 +40,23 @@
   [p]
   (let [c (async/promise-chan)
 
-        put-val!
-        (fn [v]
-          (when (some? v)
-            (async/put! c v))
-          (async/close! c))
+        forward-value!
+        (partial put-n-close! c)
 
         forward-error!
-        (fn [e]
-          (->> e
-               (ex-info "promise error" {:code :promise-error})
-               (async/put! c))
-          (async/close! c))]
+        (partial forward-error! c)]
 
     #?(:clj
        (try
          ;; WATCHOUT: There is no `then`-like api for `promise`.
          ;;           To not blocking the calling thread spwan
          ;;           a new thread / future waiting for delivery.
-         (future (put-val! @p))
+         (future (forward-value! @p))
          (catch Throwable e
            (forward-error! e)))
 
        :cljs
-       (js-invoke p "then" put-val! forward-error!))
+       (js-invoke p "then" forward-value! forward-error!))
     c))
 
 (def ^:private create-promise
@@ -86,17 +98,10 @@
    (let [p (async/promise-chan)
 
          put-resolution!
-         (fn [v]
-           (when (some? v)
-             (async/put! p v))
-           (async/close! p))
+         (partial forward-value! p)
 
          put-rejection!
-         (fn [e]
-           (->> e
-                (ex-info "promise error" {:code :promise-error})
-                (async/put! p))
-           (async/close! p))]
+         (partial forward-error! p)]
 
      (f put-resolution! put-rejection!)
      p)))
@@ -111,9 +116,7 @@
      c
      (fn [v]
        (async/close! c)
-       (when (some? v)
-         (async/put! p v))
-       (async/close! p)))
+       (put-n-close! p v)))
     p))
 
 #?(:clj

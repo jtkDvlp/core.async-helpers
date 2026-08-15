@@ -17,6 +17,7 @@
 
   #?(:clj
      (:import
+      [java.lang Thread StackTraceElement]
       [clojure.lang ExceptionInfo MapEntry]
       [clojure.core.async.impl.channels ManyToManyChannel]))
 
@@ -30,6 +31,37 @@
 (defn exception?
   [x]
   (instance? ExceptionInfo x))
+
+#?(:clj
+   (defmacro -rethrow
+     [e]
+     (if (:ns &env)
+       `(throw (js/Error. "Unsupported"))
+       `(let [exception#
+              ~e
+
+              exception-stacktrace#
+              (-> exception#
+                  (.getStackTrace))
+
+              current-stacktrace#
+              (-> (Thread/currentThread)
+                  (.getStackTrace))
+
+              boundary-trace-element#
+              (StackTraceElement. "---" "ASYNC_BOUNDARY" "jtk-dvlp.async" -1)
+
+              async-stacktrace#
+              (concat
+               exception-stacktrace#
+               [boundary-trace-element#]
+               current-stacktrace#)]
+
+          (->> async-stacktrace#
+               (into-array)
+               (.setStackTrace exception#))
+
+          (throw exception#)))))
 
 #?(:clj
    (defmacro go
@@ -66,11 +98,11 @@
      (if (:ns &env)
        `(let [v# (cljs.core.async/<! ~?exp)]
           (if (exception? v#)
-            (throw v#)
+            (-rethrow v#)
             v#))
        `(let [v# (clojure.core.async/<! ~?exp)]
           (if (exception? v#)
-            (throw v#)
+            (-rethrow v#)
             v#)))))
 
 #?(:clj
@@ -81,7 +113,7 @@
        `(throw (js/Error. "Unsupported"))
        `(let [v# (clojure.core.async/<!! ~?exp)]
           (if (exception? v#)
-            (throw v#)
+            (-rethrow v#)
             v#)))))
 
 #?(:clj
@@ -142,7 +174,7 @@
    (fn [& args]
      (try
        (when-let [e (first (filter exception? args))]
-         (throw e))
+         (-rethrow e))
        (apply f args)
        (catch ExceptionInfo e#
          e#)
@@ -210,7 +242,7 @@
    (fn [accu v]
      (try
        (when (exception? v)
-         (throw v))
+         (-rethrow v))
        (f accu v)
        (catch ExceptionInfo e#
          (reduced e#))

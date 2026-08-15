@@ -4,7 +4,7 @@
 
   #?(:cljs
      (:require-macros
-      [jtk-dvlp.async :refer [go go-loop <! <?! <?]]))
+      [jtk-dvlp.async :refer [-throw go go-loop <! <?! <?]]))
 
   #?(:clj
      (:require
@@ -33,10 +33,34 @@
   (instance? ExceptionInfo x))
 
 #?(:clj
-   (defmacro -rethrow
+   (defmacro -throw
      [e]
      (if (:ns &env)
-       `(throw (js/Error. "Unsupported"))
+       `(let [exception#
+              ~e
+
+              exception-stacktrace#
+              (aget exception# "stack")
+
+              _
+              (cljs.core/js-invoke js/Error "captureStackTrace" exception#)
+
+              current-stacktrace#
+              (aget exception# "stack")
+
+              boundary-trace-element#
+              "--- ASYNC_BOUNDARY jtk-dvlp.async -1"
+
+              async-stacktrace#
+              (str
+               exception-stacktrace#
+               "\n"
+               boundary-trace-element#
+               "\n"
+               current-stacktrace#)]
+
+          (aset exception# "stack" async-stacktrace#)
+          (throw exception#))
        `(let [exception#
               ~e
 
@@ -98,11 +122,11 @@
      (if (:ns &env)
        `(let [v# (cljs.core.async/<! ~?exp)]
           (if (exception? v#)
-            (-rethrow v#)
+            (-throw v#)
             v#))
        `(let [v# (clojure.core.async/<! ~?exp)]
           (if (exception? v#)
-            (-rethrow v#)
+            (-throw v#)
             v#)))))
 
 #?(:clj
@@ -113,7 +137,7 @@
        `(throw (js/Error. "Unsupported"))
        `(let [v# (clojure.core.async/<!! ~?exp)]
           (if (exception? v#)
-            (-rethrow v#)
+            (-throw v#)
             v#)))))
 
 #?(:clj
@@ -174,7 +198,7 @@
    (fn [& args]
      (try
        (when-let [e (first (filter exception? args))]
-         (-rethrow e))
+         (-throw e))
        (apply f args)
        (catch ExceptionInfo e#
          e#)
@@ -242,7 +266,7 @@
    (fn [accu v]
      (try
        (when (exception? v)
-         (-rethrow v))
+         (-throw v))
        (f accu v)
        (catch ExceptionInfo e#
          (reduced e#))

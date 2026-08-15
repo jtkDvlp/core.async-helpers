@@ -101,17 +101,23 @@
                    (partial cljs.core.async/close! c#)
                    (constantly nil))
 
-                 ~put-resolution!
+                 put-n-close!#
                  (fn [x#]
-                   (cljs.core.async/put! c# x#)
+                   (when (some? x#)
+                     (cljs.core.async/put! c# x#))
                    (auto-close!#))
+
+                 ~put-resolution!
+                 put-n-close!#
 
                  ~put-rejection!
                  (fn [x#]
-                   (->> x#
-                        (ex-info "callback error" {:code :callback-error})
-                        (cljs.core.async/put! c#))
-                   (auto-close!#))]
+                   (cond->> x#
+                     (not (jtk-dvlp.async/exception? x#))
+                     (ex-info "callback error" {:code :callback-error})
+
+                     :always
+                     (put-n-close!#)))]
 
              (try
                (~f ~@forms')
@@ -132,17 +138,23 @@
                    (partial clojure.core.async/close! c#)
                    (constantly nil))
 
-                 ~put-resolution!
+                 put-n-close!#
                  (fn [x#]
-                   (clojure.core.async/put! c# x#)
+                   (when (some? x#)
+                     (clojure.core.async/put! c# x#))
                    (auto-close!#))
+
+                 ~put-resolution!
+                 put-n-close!#
 
                  ~put-rejection!
                  (fn [x#]
-                   (->> x#
-                        (ex-info "callback error" {:code :callback-error})
-                        (clojure.core.async/put! c#))
-                   (auto-close!#))]
+                   (cond->> x#
+                     (not (jtk-dvlp.async/exception? x#))
+                     (ex-info "callback error" {:code :callback-error})
+
+                     :always
+                     (put-n-close!#)))]
 
              (try
                (~f ~@forms')

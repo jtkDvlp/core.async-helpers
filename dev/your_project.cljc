@@ -2,12 +2,14 @@
   #?(:clj
      (:require
       [clojure.core.async :refer [timeout]]
-      [jtk-dvlp.async :as a])
+      [jtk-dvlp.async :as a]
+      [jtk-dvlp.async.print :as p])
 
      :cljs
      (:require
       [cljs.core.async :refer [timeout]]
-      [jtk-dvlp.async :as a]))
+      [jtk-dvlp.async :as a]
+      [jtk-dvlp.async.print :as p]))
 
   #?(:clj
      (:import
@@ -35,6 +37,34 @@
          (throw))))
 
 (comment
+
+  (defn <error
+    []
+    (a/go
+      (throw (ex-info "AHHH!" {:nix :da}))))
+
+  (defn <c
+    []
+    (a/go
+      (conj (a/<! (<error))
+            :c)))
+
+  (defn <b
+    []
+    (a/go
+      (conj (a/<! (<c))
+            :b)))
+
+  (defn <a
+    []
+    (a/go
+      (conj (a/<! (<b))
+            :a)))
+
+  (p/<pprint
+   (<a))
+
+
   (a/go
     (try
       (let [a

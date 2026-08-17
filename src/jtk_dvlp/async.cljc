@@ -122,11 +122,11 @@
      (if (:ns &env)
        `(let [v# (cljs.core.async/<! ~?exp)]
           (if (exception? v#)
-            (-throw v#)
+            (jtk-dvlp.async/-throw v#)
             v#))
        `(let [v# (clojure.core.async/<! ~?exp)]
           (if (exception? v#)
-            (-throw v#)
+            (jtk-dvlp.async/-throw v#)
             v#)))))
 
 #?(:clj
@@ -137,7 +137,7 @@
        `(throw (js/Error. "Unsupported"))
        `(let [v# (clojure.core.async/<!! ~?exp)]
           (if (exception? v#)
-            (-throw v#)
+            (jtk-dvlp.async/-throw v#)
             v#)))))
 
 #?(:clj

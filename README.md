@@ -10,6 +10,7 @@ Helper pack for [core.async](https://github.com/clojure/core.async) with focus o
 ## Features
 
   * error propagation by climbing up the go block stack via [go](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#go) / [go-loop](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#go-loop) / [map](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#map) / [reduce](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#reduce) / [<!](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#<!) / [<?](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#<?) and [more](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async) (all functions within this package propagate errors)
+  * stacktrace extending beyond the context of error threads, providing a complete stacktrace and prevent context loss from compaction
   * promise channel helpers
     * to ensure promise-chan via [promise-go](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.promise#promise-go) [->promise-chan](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.promise#->promise-chan) and its behavior
     * to create promise-chan via [promise-chan](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.promise#promise-chan) function with resolve and reject handlers

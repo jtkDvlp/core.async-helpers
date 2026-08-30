@@ -35,17 +35,14 @@
 
    :dev
    {:dependencies
-    ;; NOTE: Ab 0.2.19 lädt figwheel die goog Skripte nicht mehr
-    [[com.bhauman/figwheel-main "0.2.18"]]
+    [[com.bhauman/figwheel-main "0.2.20"]]
 
     :source-paths
     ["dev"]}
 
    :repl
    {:dependencies
-    ;; NOTE: Diese Version passt zum verwendeten "figwheel", ansonsten
-    ;; läuft der cljs-repl nicht richtig
-    [[cider/piggieback "0.5.3"]]
+    [[cider/piggieback "0.7.0"]]
 
     :repl-options
     {:nrepl-middleware

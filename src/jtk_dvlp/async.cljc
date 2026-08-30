@@ -4,7 +4,7 @@
 
   #?(:cljs
      (:require-macros
-      [jtk-dvlp.async :refer [-throw go go-loop <! <?! <?]]))
+      [jtk-dvlp.async :refer [athrow go go-loop <! <?! <?]]))
 
   #?(:clj
      (:require
@@ -33,7 +33,7 @@
   (instance? ExceptionInfo x))
 
 #?(:clj
-   (defmacro -throw
+   (defmacro athrow
      [e]
      (if (:ns &env)
        `(let [exception#
@@ -42,7 +42,7 @@
               exception-stacktrace#
               (aget exception# "stack")
 
-              _
+              _#
               (cljs.core/js-invoke js/Error "captureStackTrace" exception#)
 
               current-stacktrace#
@@ -122,11 +122,11 @@
      (if (:ns &env)
        `(let [v# (cljs.core.async/<! ~?exp)]
           (if (exception? v#)
-            (jtk-dvlp.async/-throw v#)
+            (jtk-dvlp.async/athrow v#)
             v#))
        `(let [v# (clojure.core.async/<! ~?exp)]
           (if (exception? v#)
-            (jtk-dvlp.async/-throw v#)
+            (jtk-dvlp.async/athrow v#)
             v#)))))
 
 #?(:clj
@@ -137,7 +137,7 @@
        `(throw (js/Error. "Unsupported"))
        `(let [v# (clojure.core.async/<!! ~?exp)]
           (if (exception? v#)
-            (jtk-dvlp.async/-throw v#)
+            (jtk-dvlp.async/athrow v#)
             v#)))))
 
 #?(:clj
@@ -198,7 +198,7 @@
    (fn [& args]
      (try
        (when-let [e (first (filter exception? args))]
-         (-throw e))
+         (athrow e))
        (apply f args)
        (catch ExceptionInfo e#
          e#)
@@ -266,7 +266,7 @@
    (fn [accu v]
      (try
        (when (exception? v)
-         (-throw v))
+         (athrow v))
        (f accu v)
        (catch ExceptionInfo e#
          (reduced e#))

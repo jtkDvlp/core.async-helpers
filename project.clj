@@ -12,11 +12,18 @@
    :url
    "https://www.eclipse.org/legal/epl-2.0/"}
 
+  :plugins
+  [[lein-ancient "0.7.0"]]
+
   :source-paths
   ["src"]
 
-  :plugins
-  [[lein-ancient "0.7.0"]]
+  :target-path
+  "target"
+
+  :clean-targets
+  ^{:protect false}
+  [:target-path]
 
   :dependencies
   [[org.clojure/core.async "1.9.865"]]
@@ -28,17 +35,17 @@
 
    :dev
    {:dependencies
-    [[com.bhauman/figwheel-main "0.2.20"]]
+    ;; NOTE: Ab 0.2.19 lädt figwheel die goog Skripte nicht mehr
+    [[com.bhauman/figwheel-main "0.2.18"]]
 
     :source-paths
-    ["dev"]
-
-    :resource-paths
-    ["target"]}
+    ["dev"]}
 
    :repl
    {:dependencies
-    [[cider/piggieback "0.6.1"]]
+    ;; NOTE: Diese Version passt zum verwendeten "figwheel", ansonsten
+    ;; läuft der cljs-repl nicht richtig
+    [[cider/piggieback "0.5.3"]]
 
     :repl-options
     {:nrepl-middleware

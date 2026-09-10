@@ -128,9 +128,13 @@ Reader-Conditionals — dort und nur dort.
 
 **`^:known-bug` markiert Tests, die einen vorhandenen Fehler der
 Bibliothek einfordern.** Sie beschreiben das richtige Verhalten und
-schlagen deshalb heute fehl; der Test-Selektor nimmt sie aus dem
-CI-Lauf. Welcher Fehler gemeint ist, steht als `FIXME:` direkt darüber.
-Wer einen davon behebt, entfernt die Markierung mit.
+schlagen deshalb fehl; der Test-Selektor nimmt sie aus dem CI-Lauf.
+Welcher Fehler gemeint ist, steht als `FIXME:` direkt darüber. Wer
+einen davon behebt, entfernt die Markierung mit.
+
+Gerade gibt es keine. Die Markierung ist der Weg für einen Fehler, der
+auffällt, aber nicht im selben Zug behoben wird — der Test bleibt dann
+stehen, statt verlorenzugehen.
 
 Auf ClojureScript gibt es keine Test-Selektoren. Damit `^:known-bug`
 dort dasselbe bedeutet, sammelt `jtk-dvlp.test-runner` die Test-Vars

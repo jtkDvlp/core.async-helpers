@@ -130,12 +130,16 @@ lein test-cljs && node target/test-cljs/tests.js   # ClojureScript
 
 Both run on every push and pull request, see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
-The tests live in `.cljc` and run on both platforms from one source. A few of them are marked `^:known-bug`: they spell out the *correct* behaviour for a bug that is still open, so they fail on purpose and are kept out of the normal run. What is broken is written as a `FIXME:` right above each one.
+The tests live in `.cljc` and run on both platforms from one source.
+
+When a bug turns up that is not fixed in the same breath, the test for it stays — marked `^:known-bug`, with a `FIXME:` above it saying what is broken. Such a test spells out the *correct* behaviour, so it fails on purpose and is kept out of the normal run:
 
 ```bash
 lein test :known-bug   # only those
 lein test :all         # everything
 ```
+
+There are none at the moment.
 
 ## Appendix
 

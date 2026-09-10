@@ -34,9 +34,13 @@
 
   ;; NOTE: `:known-bug` marks tests that demand behaviour the library
   ;;       does not have yet. They spell out what is correct and
-  ;;       therefore fail today — they stay out of CI and run any time
-  ;;       with `lein test :known-bug`. Which bug is meant stands as a
-  ;;       FIXME right at the test.
+  ;;       therefore fail — they stay out of CI and run any time with
+  ;;       `lein test :known-bug`. Which bug is meant stands as a FIXME
+  ;;       right at the test.
+  ;;
+  ;;       There are none at the moment. The selector stays anyway: it
+  ;;       is the way to keep a bug that turns up but is not fixed in
+  ;;       the same breath.
   :test-selectors
   {:default
    (complement :known-bug)

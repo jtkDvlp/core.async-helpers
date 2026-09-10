@@ -61,6 +61,39 @@
   [x]
   (instance? ExceptionInfo x))
 
+(defn throwable?
+  "Is `x` something the platform can throw and carry as a `cause`?
+
+   On the JVM a `Throwable`, in ClojureScript a `js/Error`. Narrower
+   than `exception?`, which asks the different question of whether `x`
+   is a *carried* error."
+  [x]
+  (instance? #?(:clj Throwable :cljs js/Error) x))
+
+(defn ->exception
+  "Turns any `x` into an `ExceptionInfo` carrying `code`, so it can
+   travel a channel as an error.
+
+   An `ExceptionInfo` is handed back untouched — whoever built it meant
+   its message and data. Anything else throwable becomes the `cause`.
+   Anything else at all lands under `:error` in the `ex-data`.
+
+   WATCHOUT: That last case is why this exists. `clojure.core/ex-info`
+   demands a `Throwable` in the `cause` position and throws a
+   `ClassCastException` on anything else, while ClojureScript takes
+   whatever it is given. Putting a plain rejection value into `cause`
+   therefore blew up on one platform and quietly worked on the other."
+  [message code x]
+  (cond
+    (exception? x)
+    x
+
+    (throwable? x)
+    (ex-info message {:code code} x)
+
+    :else
+    (ex-info message {:code code, :error x})))
+
 #?(:clj
    (defmacro athrow
      "Throws `e`, after extending its stack trace with the current one.
@@ -231,6 +264,27 @@
             v#)))))
 
 #?(:clj
+   (def ^:private thread-call-takes-workload?
+     "Does the core.async on the classpath know `thread-call`'s
+      workload argument?
+
+      NOTE: The argument routes work to a pool per workload kind and
+      arrived only in a later core.async than the one this project
+      pins; passing it to an older one ends in an `ArityException` on
+      every single call. An older core.async has one pool for
+      everything, which is exactly `:mixed` — so leaving the argument
+      off there is not a workaround but the same behaviour under the
+      only name it has.
+
+      Checked rather than assumed because the version is the
+      consumer's to choose: a `:dependencies` entry here is routinely
+      overridden downstream."
+     (->> (meta #'async/thread-call)
+          (:arglists)
+          (some #(= 2 (count %)))
+          (boolean))))
+
+#?(:clj
    (defn thread-call
      "Like `core.async/thread-call`, with the error handling of `go`:
       an exception from `f` becomes the channel's value instead of
@@ -241,15 +295,18 @@
       (thread-call f :mixed))
 
      ([f workload]
-      (async/thread-call
-       (fn []
-         (try
-           (f)
-           (catch clojure.lang.ExceptionInfo e
-             e)
-           (catch Throwable e
-             (ex-info "unknown" {:code :unknown} e))))
-       workload))))
+      (let [carry-exception
+            (fn []
+              (try
+                (f)
+                (catch clojure.lang.ExceptionInfo e
+                  e)
+                (catch Throwable e
+                  (ex-info "unknown" {:code :unknown} e))))]
+
+        (if thread-call-takes-workload?
+          (async/thread-call carry-exception workload)
+          (async/thread-call carry-exception))))))
 
 #?(:clj
    (defmacro thread
@@ -423,7 +480,17 @@
       (<! (<outer (<! (amap <inner form))))
 
       (record? form)
-      (<! (<outer (<! (areduce (fn [r x] (let [c (async/chan 1)] (async/take! (<inner x) #(conj r %)) c)) form form))))
+      ;; NOTE: The way `clojure.walk/walk` does it for records: reduce
+      ;;       over the entries and hang each walked one back onto the
+      ;;       record. The record stays its own starting value so that
+      ;;       its type survives — an `(empty form)` would be a plain
+      ;;       empty map.
+      (let [<walk-entry
+            (fn [record entry]
+              (go
+                (conj record (<! (<inner entry)))))]
+
+        (<! (<outer (<! (areduce <walk-entry form form)))))
 
       (coll? form)
       (<! (<outer (clojure.core/into (empty form) (<! (amap <inner form)))))

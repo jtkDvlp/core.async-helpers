@@ -196,19 +196,7 @@
 
     (is (= :resolved (a/<! p)))))
 
-;; FIXME: A rejection with a plain value — `(reject :bad)` — throws a
-;;        ClassCastException on the JVM instead of wrapping the value in
-;;        an `ExceptionInfo`. `forward-error!` hands the plain value to
-;;        `ex-info` through `cond->>` as its *last* argument, so it lands
-;;        in the cause position, and `clojure.core/ex-info` demands a
-;;        `Throwable` there. Nobody catches it here: it escapes to
-;;        whoever called `promise-chan`.
-;;
-;;        ClojureScript is unaffected — there `ex-info` takes any value
-;;        as a cause. The marker still covers both platforms so the test
-;;        stays one piece.
-
-(deftest-async ^:known-bug promise-chan-wraps-the-rejection
+(deftest-async promise-chan-wraps-the-rejection
   (let [p (promise/promise-chan
            (fn [_resolve reject]
              (reject :just-a-value)))
@@ -217,7 +205,8 @@
         (core-async/<! p)]
 
     (is (a/exception? result))
-    (is (= {:code :promise-error} (ex-data result)))))
+    (is (= {:code :promise-error, :error :just-a-value} (ex-data result))
+        "the rejected plain value survives under `:error`")))
 
 (deftest-async promise-chan-passes-exception-info-through
   ;; NOTE: Test for issue #4 ("Carries promise ex-info"). Whoever

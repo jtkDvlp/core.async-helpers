@@ -132,12 +132,10 @@
 
                  ~put-rejection!
                  (fn [x#]
-                   (cond->> x#
-                     (not (jtk-dvlp.async/exception? x#))
-                     (ex-info "callback error" {:code :callback-error})
-
-                     :always
-                     (put-n-close!#)))]
+                   (->> x#
+                        (jtk-dvlp.async/->exception
+                         "callback error" :callback-error)
+                        (put-n-close!#)))]
 
              (try
                (~f ~@forms')
@@ -146,7 +144,10 @@
                  (cljs.core.async/close! c#))
                (catch :default e#
                  (cljs.core.async/put!
-                  c# (ex-info "callback based function error" {:code :callback-based-function-error} e#))
+                  c#
+                  (ex-info
+                   "callback based function error"
+                   {:code :callback-based-function-error} e#))
                  (cljs.core.async/close! c#)))
              c#)
 
@@ -169,12 +170,10 @@
 
                  ~put-rejection!
                  (fn [x#]
-                   (cond->> x#
-                     (not (jtk-dvlp.async/exception? x#))
-                     (ex-info "callback error" {:code :callback-error})
-
-                     :always
-                     (put-n-close!#)))]
+                   (->> x#
+                        (jtk-dvlp.async/->exception
+                         "callback error" :callback-error)
+                        (put-n-close!#)))]
 
              (try
                (~f ~@forms')
@@ -183,7 +182,10 @@
                  (clojure.core.async/close! c#))
                (catch Throwable e#
                  (clojure.core.async/put!
-                  c# (ex-info "callback based function error" {:code :callback-based-function-error} e#))
+                  c#
+                  (ex-info
+                   "callback based function error"
+                   {:code :callback-based-function-error} e#))
                  (clojure.core.async/close! c#)))
              c#))))))
 

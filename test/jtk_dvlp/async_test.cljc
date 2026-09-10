@@ -114,6 +114,52 @@
     (is (not (a/exception? 42)))
     (is (not (a/exception? {:code :x})))))
 
+(deftest throwable?-detects-throwables
+  (is (a/throwable? (ex-info "x" {})))
+  (is (a/throwable? (foreign-exception "x")))
+
+  (testing "ordinary values cannot be thrown"
+    (is (not (a/throwable? nil)))
+    (is (not (a/throwable? 42)))
+    (is (not (a/throwable? :bad)))
+    (is (not (a/throwable? {:code :x})))))
+
+(deftest ->exception-passes-exception-info-through
+  ;; NOTE: Whoever already holds an `ExceptionInfo` meant its message
+  ;;       and data — those stay untouched.
+  (let [original (ex-info "mine" {:code :mine, :details 42})]
+    (is (identical? original
+                    (a/->exception "shell" :shell original)))))
+
+(deftest ->exception-makes-foreign-error-the-cause
+  (let [result
+        (a/->exception "shell" :shell (foreign-exception "raw"))]
+
+    (is (a/exception? result))
+    (is (= "shell" (ex-message result)))
+    (is (= {:code :shell} (ex-data result)))
+    (is (= "raw" (cause-message result)))))
+
+(deftest ->exception-lifts-a-plain-value-into-the-data
+  ;; NOTE: The case this exists for. `clojure.core/ex-info` demands a
+  ;;       `Throwable` in the cause position and throws a
+  ;;       ClassCastException on anything else, while ClojureScript
+  ;;       takes whatever it is given. A plain value therefore belongs
+  ;;       in the data, not in the cause — and the same way on both
+  ;;       platforms.
+  (let [result
+        (a/->exception "shell" :shell :just-a-value)]
+
+    (is (a/exception? result))
+    (is (= {:code :shell, :error :just-a-value} (ex-data result)))
+    (is (nil? (ex-cause result))))
+
+  (testing "nil and collections as well"
+    (is (= {:code :shell, :error nil}
+           (ex-data (a/->exception "shell" :shell nil))))
+    (is (= {:code :shell, :error {:a 1}}
+           (ex-data (a/->exception "shell" :shell {:a 1}))))))
+
 
 ;;; --- go / go-loop -----------------------------------------------------
 
@@ -255,23 +301,22 @@
      (is (thrown-with-msg? ExceptionInfo #"test failure"
                            (a/<?!! (<failing))))))
 
-;; FIXME: `thread-call` and `thread` are unusable. Both call
-;;        `core.async/thread-call` with two arguments (function and
-;;        workload), but the core.async version pinned in project.clj,
-;;        1.3.610, only knows the arity `[f]`. Every call ends in an
-;;        ArityException — the workload argument arrived in a later
-;;        core.async.
-;;
-;;        The tests below spell out the correct behaviour and are
-;;        therefore `^:known-bug`: they stay out of CI but run any time
-;;        with `lein test :known-bug`.
-
 #?(:clj
-   (deftest ^:known-bug thread-call-yields-result
+   (deftest thread-call-yields-result
      (is (= 42 (a/<!! (a/thread-call (fn [] 42)))))))
 
 #?(:clj
-   (deftest ^:known-bug thread-call-carries-exception-info
+   (deftest thread-call-accepts-a-workload
+     ;; NOTE: The argument routes work to a pool per kind. Older
+     ;;       core.async versions do not know it and have one pool for
+     ;;       everything — the call still has to go through, see
+     ;;       `thread-call-takes-workload?`.
+     (doseq [workload [:io :compute :mixed]]
+       (is (= workload (a/<!! (a/thread-call (fn [] workload) workload)))
+           (str "workload " workload)))))
+
+#?(:clj
+   (deftest thread-call-carries-exception-info
      (let [result
            (core-async/<!!
             (a/thread-call
@@ -281,7 +326,7 @@
        (is (= {:code :thread} (ex-data result))))))
 
 #?(:clj
-   (deftest ^:known-bug thread-call-converts-foreign-exception
+   (deftest thread-call-converts-foreign-exception
      (let [result
            (core-async/<!!
             (a/thread-call
@@ -292,11 +337,11 @@
        (is (= "raw" (cause-message result))))))
 
 #?(:clj
-   (deftest ^:known-bug thread-yields-result
+   (deftest thread-yields-result
      (is (= 42 (a/<!! (a/thread 42))))))
 
 #?(:clj
-   (deftest ^:known-bug thread-carries-error
+   (deftest thread-carries-error
      (let [result
            (core-async/<!!
             (a/thread (throw (ex-info "in the thread" {:code :thread}))))]
@@ -538,18 +583,8 @@
 
     (is (= [:a 10] (vec result)))))
 
-;; FIXME: `awalk` hangs forever on a record. The record branch builds a
-;;        channel per field, takes the value out with `take!` and drops
-;;        it in the callback — nothing is ever put onto the channel
-;;        itself. The `<!` that follows therefore waits for a value that
-;;        never arrives. Affects `awalk` and with it `apostwalk` and
-;;        `aprewalk`.
-;;
-;;        The test is `^:known-bug`: it stays out of CI (where it would
-;;        hang until the bound) but runs with `lein test :known-bug`.
-
 (defrecord Point [x y])
 
-(deftest-async ^:known-bug awalk-walks-records
+(deftest-async awalk-walks-records
   (is (= (->Point 2 4)
          (a/<! (a/apostwalk <double-numbers (->Point 1 2))))))

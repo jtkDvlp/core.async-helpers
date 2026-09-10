@@ -81,28 +81,15 @@
                     (call-with-success-and-failure
                      :ok false resolve reject))))))
 
-;; FIXME: A rejection with a plain value — `(reject :bad)` — throws a
-;;        ClassCastException on the JVM instead of wrapping the value in
-;;        an `ExceptionInfo`. `put-rejection!` hands the plain value to
-;;        `ex-info` through `cond->>` as its *last* argument, so it lands
-;;        in the cause position, and `clojure.core/ex-info` demands a
-;;        `Throwable` there. The outer `catch Throwable` swallows it,
-;;        which is why `{:code :callback-error}` never comes about and
-;;        `{:code :callback-based-function-error}` ends up on the channel
-;;        instead.
-;;
-;;        ClojureScript is unaffected — there `ex-info` takes any value
-;;        as a cause. The marker still covers both platforms so the test
-;;        stays one piece.
-
-(deftest-async ^:known-bug cb->c-wraps-the-rejection-as-exception-info
+(deftest-async cb->c-wraps-the-rejection-as-exception-info
   (let [result
         (core-async/<! (callback/cb->c
                         (call-with-success-and-failure
                          :bad true resolve reject)))]
 
     (is (a/exception? result))
-    (is (= {:code :callback-error} (ex-data result)))))
+    (is (= {:code :callback-error, :error :bad} (ex-data result))
+        "the rejected plain value survives under `:error`")))
 
 (deftest-async cb->c-finds-marks-inside-inline-functions
   ;; NOTE: The case from the docstring of `cb->c`: the error is to be
@@ -183,7 +170,7 @@
 (deftest-async <cb!-takes-the-callback-value
   (is (= :value (callback/<cb! (call-with-result-last :value)))))
 
-(deftest-async ^:known-bug <cb!-throws-the-rejection
+(deftest-async <cb!-throws-the-rejection
   (let [result
         (core-async/<!
          (a/go
@@ -191,9 +178,9 @@
             (call-with-success-and-failure :bad true resolve reject))))]
 
     (is (a/exception? result))
-    (is (= {:code :callback-error} (ex-data result)))))
+    (is (= {:code :callback-error, :error :bad} (ex-data result)))))
 
-(deftest-async ^:known-bug <cb!-allows-try-catch
+(deftest-async <cb!-allows-try-catch
   (let [result
         (try
           (callback/<cb!
@@ -202,4 +189,4 @@
           (catch ExceptionInfo e
             [:caught (ex-data e)]))]
 
-    (is (= [:caught {:code :callback-error}] result))))
+    (is (= [:caught {:code :callback-error, :error :bad}] result))))

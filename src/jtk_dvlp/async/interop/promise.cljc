@@ -41,12 +41,8 @@
 
 (defn- forward-error!
   [c e]
-  (cond->> e
-    (not (jtk-dvlp.async/exception? e))
-    (ex-info "promise error" {:code :promise-error})
-
-    :always
-    (put-n-close! c)))
+  (->> (jtk-dvlp.async/->exception "promise error" :promise-error e)
+       (put-n-close! c)))
 
 (defn p->c
   "Turns promise `p` into a `promise-chan` carrying its value, or an

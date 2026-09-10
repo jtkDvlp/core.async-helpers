@@ -1,0 +1,68 @@
+name: CI
+
+# NOTE: `push` only on the long-lived branches, `pull_request` for
+#       everything else. Both on every branch would build each commit of
+#       an open PR twice.
+on:
+  push:
+    branches:
+      - master
+      - 'b*.X.X'
+  pull_request:
+
+# NOTE: A new push to the same branch makes the running job obsolete —
+#       it is cancelled instead of occupying a runner.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clojure:
+    name: Clojure
+    runs-on: ubuntu-latest
+
+    # NOTE: The test run takes under a minute. Ten catch the case of a
+    #       test waiting on a channel that never delivers.
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      # NOTE: One JDK version, deliberately. The library uses nothing
+      #       version-dependent; a matrix would multiply the runtime
+      #       without checking more.
+      - name: Set up the JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # NOTE: Leiningen directly rather than through a third-party
+      #       action. One dependency less that can break — and break it
+      #       did on the first CI run: `delaguardo/setup-clojure@v13`
+      #       does not exist. The version hangs off a tag rather than
+      #       the `stable` branch, so a new Leiningen release cannot
+      #       change the build unnoticed.
+      - name: Set up Leiningen
+        run: |
+          mkdir -p "$HOME/bin"
+          curl -fsSL -o "$HOME/bin/lein" \
+            https://raw.githubusercontent.com/technomancy/leiningen/2.12.0/bin/lein
+          chmod +x "$HOME/bin/lein"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Restore the dependency cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.lein/self-installs
+          key: ${{ runner.os }}-m2-${{ hashFiles('project.clj') }}
+          restore-keys: ${{ runner.os }}-m2-
+
+      # NOTE: No selector, so without the `^:known-bug` tests. Those
+      #       demand behaviour the library does not have yet and fail on
+      #       purpose; they run with `lein test :known-bug`.
+      - name: Test (Clojure)
+        run: lein test

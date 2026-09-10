@@ -66,3 +66,56 @@ jobs:
       #       purpose; they run with `lein test :known-bug`.
       - name: Test (Clojure)
         run: lein test
+
+  # NOTE: Its own job rather than a second step above. That way both
+  #       platforms run side by side, and a failure of one does not hide
+  #       the result of the other.
+  clojurescript:
+    name: ClojureScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up the JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Leiningen
+        run: |
+          mkdir -p "$HOME/bin"
+          curl -fsSL -o "$HOME/bin/lein" \
+            https://raw.githubusercontent.com/technomancy/leiningen/2.12.0/bin/lein
+          chmod +x "$HOME/bin/lein"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      # NOTE: The tests run under Node, not in a browser. They touch no
+      #       DOM — a browser would need a headless setup and would add
+      #       nothing.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Restore the dependency cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.lein/self-installs
+          key: ${{ runner.os }}-m2-${{ hashFiles('project.clj') }}
+          restore-keys: ${{ runner.os }}-m2-
+
+      - name: Compile the tests
+        run: lein test-cljs
+
+      # WATCHOUT: The exit code comes from `jtk-dvlp.test-runner`, which
+      #           sets it in the `:end-run-tests` report. Without that,
+      #           Node would end with 0 even on red tests and the job
+      #           would be green when it is not.
+      - name: Test (ClojureScript)
+        run: node target/test-cljs/tests.js

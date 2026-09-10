@@ -32,20 +32,26 @@
 
       Yields a channel with whatever `print-fn` returned, so it can be
       waited on. `<println` and `<pprint` are this with a fixed
-      `print-fn`.
-
-      WATCHOUT: The `catch :default` below is not valid Clojure on its
-      own — it only compiles because `core.async` rewrites a `try` that
-      contains a parking take into its own state machine, and that
-      accepts `:default` on both platforms. The `<!` in the body is
-      what makes it a parking take. Remove it, or move it out of the
-      `try`, and this stops compiling in Clojure."
+      `print-fn`."
      [print-fn <form]
-     `(jtk-dvlp.async/go
-        (try
-          (~print-fn (jtk-dvlp.async/<! ~<form))
-          (catch :default e#
-            (~print-fn e#))))))
+     ;; NOTE: The catch clause names the platform's own root of the
+     ;;       exception hierarchy. `:default` is ClojureScript's and is
+     ;;       not valid Clojure; that it used to compile here anyway was
+     ;;       an accident of `core.async`, which rewrites a `try`
+     ;;       containing a parking take into its own state machine and
+     ;;       accepts `:default` there. Taking the `<!` out of the `try`
+     ;;       would have broken the build with nothing at this line to
+     ;;       explain why.
+     (let [catch-class
+           (if (:ns &env)
+             :default
+             'java.lang.Throwable)]
+
+       `(jtk-dvlp.async/go
+          (try
+            (~print-fn (jtk-dvlp.async/<! ~<form))
+            (catch ~catch-class e#
+              (~print-fn e#)))))))
 
 #?(:clj
    (defmacro <println

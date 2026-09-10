@@ -143,7 +143,9 @@ Test-Namespace muss dort in den `:require` und in die
 `ns-interns`-Liste** — sonst läuft er auf Clojure mit und auf
 ClojureScript stillschweigend nicht.
 
-**Ein `deftest-async` ohne `is` schlägt nicht fehl.** Läuft der Körper in
-eine Ausnahme, bevor eine Assertion greift, meldet der Test das; läuft er
-gar nicht an, meldet niemand etwas. Deshalb prüft jeder Test mindestens
-eine Zusicherung.
+**Ein `deftest-async` ohne `is` schlägt fehl.** Ein asynchroner
+Testkörper, der zu früh zurückkehrt, prüft nichts — und ein Test, der
+nichts prüft, ist grün. Deshalb vergleicht `deftest-async` den
+Zusicherungszähler vor und nach dem Körper und meldet es, wenn keine
+einzige Zusicherung lief. Das ist auch der Grund, warum es das Makro
+gibt und nicht ein schlichtes `deftest` plus `<!!`.

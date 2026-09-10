@@ -375,6 +375,16 @@
 (deftest-async all-collects-every-value
   (is (= [1 2 3] (a/<! (a/all [(<value 1) (<value 2) (<value 3)])))))
 
+(deftest-async map-and-all-handle-no-channels-at-all
+  ;; NOTE: `core.async/map` waits forever here — it counts down the
+  ;;       channels it has and with none it never reaches zero. That
+  ;;       propagated into `all` and `amap`, so an empty collection took
+  ;;       the caller down with it. The answer is now `(f)`, the same
+  ;;       one `clojure.core` gives for folding over nothing.
+  (is (= [] (a/<! (a/all []))))
+  (is (= 0 (a/<! (a/map + []))))
+  (is (= [] (a/<! (a/map vector [])))))
+
 (deftest-async all-carries-error
   (let [result
         (core-async/<! (a/all [(<value 1) (<failing)]))]
@@ -403,6 +413,27 @@
     (a/<! done)
     (is (= [1 2 3] @seen))))
 
+(deftest-async consume!-passes-a-false-through
+  ;; NOTE: A closed channel yields `nil`, and that is the only thing
+  ;;       meant to end the loop. Testing the value for truthiness
+  ;;       instead would make a `false` in the stream look like the end
+  ;;       of it and silently drop everything after it.
+  (let [seen
+        (atom [])
+
+        done
+        (core-async/chan)
+
+        collect!
+        (fn [v]
+          (swap! seen conj v)
+          (when (= v 3)
+            (core-async/close! done)))]
+
+    (a/consume! (core-async/to-chan! [1 false 3]) collect!)
+    (a/<! done)
+    (is (= [1 false 3] @seen))))
+
 
 ;;; --- smap / chain -----------------------------------------------------
 
@@ -430,6 +461,22 @@
     (is (= [1 2 3] (a/<! (a/smap <slowest-first [1 2 3]))))
     (is (= [1 2 3] @finished)
         "sequential: the slowest x=1 still finishes first")))
+
+(deftest-async smap-keeps-falsy-elements
+  ;; NOTE: `nil` and `false` are values like any other. Ending the
+  ;;       mapping on them would drop the rest of the collection without
+  ;;       a word.
+  (is (= [1 nil 3] (a/<! (a/smap (fn [x] (a/go x)) [1 nil 3]))))
+  (is (= [1 false 3] (a/<! (a/smap (fn [x] (a/go x)) [1 false 3])))))
+
+(deftest-async smap-stops-at-the-shortest-collection
+  ;; NOTE: Same rule as `clojure.core/map`.
+  (let [<pair (fn [a b] (a/go [a b]))]
+    (is (= [[1 :a] [2 :b]]
+           (a/<! (a/smap <pair [1 2 3] [:a :b]))))))
+
+(deftest-async smap-handles-an-empty-collection
+  (is (= [] (a/<! (a/smap (fn [x] (a/go x)) [])))))
 
 (deftest-async smap-carries-error
   (let [result
@@ -461,6 +508,27 @@
             x))]
 
     (is (= [1 2 3] (a/<! (a/amap <slowest-first [1 2 3]))))))
+
+(deftest-async amap-keeps-falsy-results
+  ;; NOTE: A go block whose body yields `nil` closes its channel without
+  ;;       putting anything on it, and `core.async/map` cannot tell that
+  ;;       apart from a channel that is done — so a single `nil` used to
+  ;;       take the whole call down and `amap` yielded `nil` instead of
+  ;;       a vector. `amap` boxes each result to keep them apart.
+  (is (= [1 nil 3] (a/<! (a/amap (fn [x] (a/go x)) [1 nil 3]))))
+  (is (= [1 false 3] (a/<! (a/amap (fn [x] (a/go x)) [1 false 3])))))
+
+(deftest-async amap-and-smap-agree-on-falsy-values
+  ;; NOTE: The two differ in how they execute, never in what they
+  ;;       return. A regression in either one shows up here.
+  (let [<identity (fn [x] (a/go x))
+        input     [nil 1 false 2 nil]]
+
+    (is (= (a/<! (a/smap <identity input))
+           (a/<! (a/amap <identity input))))))
+
+(deftest-async amap-handles-an-empty-collection
+  (is (= [] (a/<! (a/amap (fn [x] (a/go x)) [])))))
 
 (deftest-async amap-carries-error
   (let [result
@@ -497,6 +565,16 @@
 (deftest-async areduce-folds-asynchronously
   (let [<sum (fn [accu x] (a/go (+ accu x)))]
     (is (= 6 (a/<! (a/areduce <sum 0 [1 2 3]))))))
+
+(deftest-async areduce-keeps-falsy-items
+  ;; NOTE: Walking the seq rather than testing the item — otherwise the
+  ;;       reduction ends at the first `nil` or `false` in `coll`.
+  (let [<conj (fn [result x] (a/go (conj result x)))]
+    (is (= [1 nil 3] (a/<! (a/areduce <conj [] [1 nil 3]))))
+    (is (= [1 false 3] (a/<! (a/areduce <conj [] [1 false 3]))))))
+
+(deftest-async areduce-handles-an-empty-collection
+  (is (= :init (a/<! (a/areduce (fn [_ _] (a/go :never)) :init [])))))
 
 (deftest-async areduce-carries-error
   (let [result
@@ -542,6 +620,12 @@
 
 (deftest-async apostwalk-walks-scalars
   (is (= 4 (a/<! (a/apostwalk <double-numbers 2)))))
+
+(deftest-async apostwalk-keeps-nil-inside-collections
+  ;; NOTE: `apostwalk` walks through `amap`, so it used to lose a whole
+  ;;       collection over a single `nil` in it.
+  (is (= [2 nil 6] (a/<! (a/apostwalk <double-numbers [1 nil 3]))))
+  (is (= {:a nil, :b 4} (a/<! (a/apostwalk <double-numbers {:a nil, :b 2})))))
 
 (deftest-async apostwalk-carries-error
   (let [result

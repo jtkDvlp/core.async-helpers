@@ -322,25 +322,42 @@
 (defn map
   "Like `core.async/map`, but propagates errors: if any channel in
    `chs` carries an error, or `f` throws, that error becomes the result
-   instead of being lost."
+   instead of being lost.
+
+   With no channels at all the result is `(f)`, the same answer
+   `clojure.core` gives for folding over nothing — `(map + [])` yields
+   `0`, `(map vector [])` yields `[]`."
   [f chs]
-  (async/map
-   (fn [& args]
-     (try
-       (when-let [e (first (filter exception? args))]
-         (athrow e))
-       (apply f args)
-       (catch ExceptionInfo e#
-         e#)
-       (catch #?(:cljs :default :clj Throwable) e#
-         (ex-info "unknown" {:code :unknown} e#))))
-   chs))
+  ;; NOTE: A deliberate deviation from `core.async/map`, which waits
+  ;;       forever on an empty list of channels: it counts down the
+  ;;       channels it has, and with none it never reaches zero and
+  ;;       never closes its output. Nobody wants that answer, and it
+  ;;       propagates — `all` is this function, and so is `amap`, so an
+  ;;       empty collection took the caller down with it.
+  ;;
+  ;;       `(f)` may of course throw for a function without a 0-arity;
+  ;;       `go` then carries that error, which is still an answer rather
+  ;;       than a standstill.
+  (if (empty? chs)
+    (go (f))
+    (async/map
+     (fn [& args]
+       (try
+         (when-let [e (first (filter exception? args))]
+           (athrow e))
+         (apply f args)
+         (catch ExceptionInfo e#
+           e#)
+         (catch #?(:cljs :default :clj Throwable) e#
+           (ex-info "unknown" {:code :unknown} e#))))
+     chs)))
 
 (defn all
   "Waits for all channels `chs` and yields a vector of their values, in
    the order of `chs`. Alias for `(map vector chs)`.
 
-   Propagates the first error among them."
+   Propagates the first error among them. With no channels the result
+   is `[]`."
   [chs]
   (map vector chs))
 
@@ -349,21 +366,24 @@
    the consuming runs on its own — on a `future` in Clojure, in a go
    block in ClojureScript.
 
-   Ends on a closed channel and on a thrown exception.
-
-   WATCHOUT: It also ends on any falsy value. A `nil` or `false` in the
-   stream stops the consuming, even when more values follow."
+   Ends on a closed channel and on a thrown exception. A `false` in
+   the stream is an ordinary value and is passed to `f` like any
+   other."
   [ch f]
+  ;; NOTE: `some?`, not truthiness. A closed channel yields `nil` and
+  ;;       that is the only thing meant to end the loop — testing the
+  ;;       value itself would make a `false` in the stream look like the
+  ;;       end of it.
   #?(:clj
      (future
        (loop [val (async/<!! ch)]
-         (when val
+         (when (some? val)
            (f val)
            (recur (async/<!! ch)))))
 
      :cljs
      (async/go-loop [val (async/<! ch)]
-       (when val
+       (when (some? val)
          (f val)
          (recur (async/<! ch)))))
   nil)
@@ -374,14 +394,18 @@
    `xs`, each waiting for the one before it.
 
    Yields a channel with the vector of results. Propagates errors.
-
-   WATCHOUT: Stops as soon as the next element is falsy — a `nil` or
-   `false` in `xs` ends the mapping instead of being passed through.
+   Stops when the shortest collection runs out, like
+   `clojure.core/map`; a `nil` or `false` among the elements is an
+   ordinary value.
 
    See `amap` for the variant that may run in parallel."
   [<f & xs]
-  (go-loop [result [], xs xs]
-    (if (ffirst xs)
+  ;; NOTE: The loop ends when a collection runs out, not when an
+  ;;       element is falsy. Asking `(ffirst xs)` instead would make a
+  ;;       `nil` or `false` in the middle look like the end of the
+  ;;       collection and silently drop the rest.
+  (go-loop [result [], xs (mapv seq xs)]
+    (if (and (seq xs) (every? some? xs))
       (let [next-result
             (->> xs
                  (mapv first)
@@ -404,12 +428,32 @@
    parallel; ClojureScript is single-threaded and only interleaves
    them. The *results* keep the order of `xs` either way.
 
-   Yields a channel with the vector of results. Propagates errors.
+   Yields a channel with the vector of results. Propagates errors. A
+   `nil` among the results is an ordinary value and keeps its place.
 
    See `smap` when the calls must not overlap."
   [<f & xs]
-  (->> (apply clojure.core/map <f xs)
-       (map vector)))
+  ;; NOTE: Each result is boxed in a vector before it goes through
+  ;;       `map`, and unboxed afterwards. Without that a single `nil`
+  ;;       result would take the whole call down with it: a go block
+  ;;       whose body yields `nil` closes its channel without ever
+  ;;       putting anything on it, and `core.async/map` cannot tell that
+  ;;       apart from a channel that is simply done — so it closes its
+  ;;       own output and `amap` yields `nil` instead of a vector.
+  ;;
+  ;;       `map` and `all` keep the plain behaviour on purpose: they
+  ;;       take *channels*, where `nil` really does mean "closed". Here
+  ;;       the input is a collection, and `nil` in it is data.
+  (let [<box-result
+        (fn [ch]
+          (go [(<! ch)]))]
+
+    (go
+      (->> (apply clojure.core/map <f xs)
+           (clojure.core/map <box-result)
+           (map vector)
+           (<!)
+           (mapv first)))))
 
 (defn reduce
   "Like `core.async/reduce`, but propagates errors: an error carried on
@@ -431,16 +475,18 @@
   "Like `clojure.core/reduce`, but `<f` is asynchronous and returns a
    channel. Reduces `coll` into `init`, waiting for each step.
 
-   Yields a channel with the result. Propagates errors.
-
-   WATCHOUT: Stops as soon as the next item is falsy — a `nil` or
-   `false` in `coll` ends the reduction."
+   Yields a channel with the result. Propagates errors. A `nil` or
+   `false` in `coll` is an ordinary item and is reduced like any
+   other."
   [<f init coll]
-  (go-loop [accu init, [item & rest-coll] coll]
-    (if item
+  ;; NOTE: Walking the seq rather than testing the item. Asking `(if
+  ;;       item ...)` instead would end the reduction at the first
+  ;;       `nil` or `false` in `coll`.
+  (go-loop [accu init, coll (seq coll)]
+    (if coll
       (recur
-       (<! (<f accu item))
-       rest-coll)
+       (<! (<f accu (first coll)))
+       (next coll))
       accu)))
 
 (defn into

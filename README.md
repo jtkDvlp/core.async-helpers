@@ -1,3 +1,4 @@
+[![CI](https://github.com/jtkDvlp/core.async-helpers/actions/workflows/ci.yml/badge.svg)](https://github.com/jtkDvlp/core.async-helpers/actions/workflows/ci.yml)
 [![Clojars Project](https://img.shields.io/clojars/v/jtk-dvlp/core.async-helpers.svg)](https://clojars.org/jtk-dvlp/core.async-helpers)
 [![cljdoc badge](https://cljdoc.org/badge/jtk-dvlp/core.async-helpers)](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT)
 [![License](https://img.shields.io/badge/License-EPL%202.0-red.svg)](https://opensource.org/licenses/EPL-2.0)
@@ -5,28 +6,61 @@
 
 # Helpers for core.async
 
-Helper pack for [core.async](https://github.com/clojure/core.async) with focus on error propagation, see [docs](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT) for more and examples.
+Helper pack for [core.async](https://github.com/clojure/core.async) with focus on error propagation. Clojure and ClojureScript, from one `.cljc` source.
+
+See the [API docs](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT) for the full reference.
+
+## The problem it solves
+
+In plain `core.async` an exception thrown inside a `go` block is swallowed. The block's channel just closes, the caller takes `nil`, and nothing says why:
+
+```clojure
+;; Clojure REPL, plain core.async
+(async/<!! (async/go (throw (ex-info "boom" {}))))
+;; => nil
+```
+
+Here the exception travels as a *value* on the channel and is thrown again by `<!` in whichever go block takes it. Inside a `go` that throw is caught once more and becomes that block's result — so an error keeps climbing the go block stack until someone catches it, the way it would in synchronous code:
+
+```clojure
+;; same REPL, with this package
+(a/<!! (a/go (throw (ex-info "boom" {}))))
+;; => throws clojure.lang.ExceptionInfo: boom
+```
 
 ## Features
 
-  * error propagation by climbing up the go block stack via [go](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#go) / [go-loop](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#go-loop) / [map](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#map) / [reduce](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#reduce) / [<!](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#<!) / [<?](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async#<?) and [more](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async) (all functions within this package propagate errors)
-  * stacktrace extending beyond the context of error threads, providing a complete stacktrace and prevent context loss from compaction
-  * promise channel helpers
-    * to ensure promise-chan via [promise-go](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.promise#promise-go) [->promise-chan](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.promise#->promise-chan) and its behavior
-    * to create promise-chan via [promise-chan](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.promise#promise-chan) function with resolve and reject handlers
-    * conversion from channel to promise and vice versa via [c->p](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.inertop.promise#c->p), [p->c](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.inertop.promise#p->c) and [<!p](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.promise#<!p)
-  * helpers to handle callback based functions by conversion into channel via [cb->c](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.callback#cb->c) and [<cb!](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.callback#<cb!)
+Full reference per namespace:
+[`jtk-dvlp.async`](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async) ·
+[`…interop.promise`](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.promise) ·
+[`…interop.callback`](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.interop.callback) ·
+[`…print`](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT/api/jtk-dvlp.async.print)
+
+  * **Error propagation up the go block stack.** Every function in this package propagates errors, not only the obvious ones: `go`, `go-loop`, `<!`, `<!!`, `thread`, and `<?!` for a value that may or may not be a channel.
+
+  * **Stack traces that survive the boundary.** The trace is stitched across the go block boundary at an `ASYNC_BOUNDARY` marker, so it shows both the block that failed and the one that asked for the value — instead of ending where the thread began.
+
+  * **Collection helpers.** `map`, `all`, `reduce`, `into` and `consume!` over channels; `smap` (strictly sequential), `amap` (may run in parallel), `areduce`, `apostwalk` and `aprewalk` where the mapping function itself is asynchronous.
+
+  * **Promise interop.** `<p!` takes a promise inside a go block; `p->c` and `c->p` convert either way; `promise-go` and `->promise-chan` give a result that can be read more than once; `promise-chan` builds one from `resolve`/`reject` handlers. A rejected promise arrives as a thrown error, and an error on a channel rejects the promise it becomes.
+
+  * **Callback interop.** `cb->c` turns a callback-based call into a channel, and `<cb!` takes from it — so the call reads like any other step in a go block instead of nesting one level deeper, and a failure arrives as a thrown error rather than as a second callback.
+
+  * **Debug printing.** `<println` and `<pprint` print what a channel ends up with — the value, or the error it carries.
 
 ## Getting started
 
-### Get it / add dependency
+### Add the dependency
 
-Add the following dependency to your `project.clj`:<br>
 [![Clojars Project](https://img.shields.io/clojars/v/jtk-dvlp/core.async-helpers.svg)](https://clojars.org/jtk-dvlp/core.async-helpers)
 
-### Usage
+### Do not mix with `clojure.core.async`
 
-Pay attention mixing up error propagation functions of this library and clojure.core.async functions. clojure.core.async function do not propagate errors. E.g. using a core.async go-block within a error propagation go-block stack will break error propagation. So do not mix it up!
+Error propagation works because the error is an ordinary value on the channel. A plain `core.async/<!` in between takes that value silently — the error is gone, and nothing is left to notice it by. The same goes for a `core.async/go` block inside a stack of propagating ones: it does not carry the error on, and the chain breaks there.
+
+So within a go block stack that should propagate, take with `jtk-dvlp.async/<!` and open blocks with `jtk-dvlp.async/go`. `timeout`, `chan`, `put!` and the rest of `core.async` are fine — they do not touch the value.
+
+### Usage
 
 ```clojure
 (ns your-project
@@ -85,6 +119,23 @@ Pay attention mixing up error propagation functions of this library and clojure.
   ,,,)
 ```
 
+The `catch` sees the error from `<fail-during-some-async-stuff` even though it was thrown in a different go block, on a different thread. `<do-some-async-stuff :c` is never reached, just as it would not be in synchronous code.
+
+## Development
+
+```bash
+lein test                                          # Clojure
+lein test-cljs && node target/test-cljs/tests.js   # ClojureScript
+```
+
+Both run on every push and pull request, see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+The tests live in `.cljc` and run on both platforms from one source. A few of them are marked `^:known-bug`: they spell out the *correct* behaviour for a bug that is still open, so they fail on purpose and are kept out of the normal run. What is broken is written as a `FIXME:` right above each one.
+
+```bash
+lein test :known-bug   # only those
+lein test :all         # everything
+```
 
 ## Appendix
 

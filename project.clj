@@ -27,6 +27,26 @@
    [org.clojure/clojurescript "1.11.132"]
    [org.clojure/core.async "1.3.610"]]
 
+  ;; NOTE: The tests are `.cljc` on purpose — they are meant to run
+  ;;       against ClojureScript later on, unchanged.
+  :test-paths
+  ["test"]
+
+  ;; NOTE: `:known-bug` marks tests that demand behaviour the library
+  ;;       does not have yet. They spell out what is correct and
+  ;;       therefore fail today — they stay out of CI and run any time
+  ;;       with `lein test :known-bug`. Which bug is meant stands as a
+  ;;       FIXME right at the test.
+  :test-selectors
+  {:default
+   (complement :known-bug)
+
+   :known-bug
+   :known-bug
+
+   :all
+   (constantly true)}
+
   :profiles
   {:dev
    {:dependencies

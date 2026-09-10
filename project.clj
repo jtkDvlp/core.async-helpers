@@ -47,6 +47,18 @@
    :all
    (constantly true)}
 
+  ;; NOTE: Compiles the same `.cljc` tests for Node. Running them is a
+  ;;       separate `node target/test-cljs/tests.js` — lein does not
+  ;;       take that step, it stays with the caller (see the README and
+  ;;       the CI workflow).
+  :aliases
+  {"test-cljs"
+   ["run" "-m" "cljs.main"
+    "--target" "node"
+    "--output-dir" "target/test-cljs"
+    "--output-to" "target/test-cljs/tests.js"
+    "--compile" "jtk-dvlp.test-runner"]}
+
   :profiles
   {:dev
    {:dependencies

@@ -130,6 +130,8 @@ lein test-cljs && node target/test-cljs/tests.js   # ClojureScript
 
 Both run on every push and pull request, see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
+What has changed, and what is on the default branch but not released yet, is in [`CHANGELOG.md`](CHANGELOG.md).
+
 The tests live in `.cljc` and run on both platforms from one source.
 
 When a bug turns up that is not fixed in the same breath, the test for it stays — marked `^:known-bug`, with a `FIXME:` above it saying what is broken. Such a test spells out the *correct* behaviour, so it fails on purpose and is kept out of the normal run:

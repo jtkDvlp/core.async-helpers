@@ -1,0 +1,81 @@
+name: Commit messages
+
+# NOTE: Only on pull requests. On `master` the commits are already in —
+#       a red cross there tells nobody anything they can still act on.
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conventional-commits:
+    name: Conventional Commits
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      # NOTE: Full history, because the check compares the PR against
+      #       the base branch and needs both sides.
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # WATCHOUT: This repository merges PRs, it does not squash. Every
+      #           single commit of the branch therefore ends up on
+      #           master and is read by release-please — so every single
+      #           one is checked here, not just the PR title.
+      #
+      # NOTE: A handful of lines of shell instead of a commitlint
+      #       action: the rule is one regular expression, and a third
+      #       party action is one more thing that can vanish. The first
+      #       CI run of this repository died on exactly that.
+      - name: Check the commit subjects
+        run: |
+          types='build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test'
+          pattern="^(${types})(\([a-z0-9._/-]+\))?!?: .+"
+
+          # NOTE: `--no-merges` because merging master back into the
+          #       branch is legitimate and its subject is git's, not
+          #       ours. release-please ignores those commits as well.
+          subjects="$(git log --no-merges --format=%s \
+            "origin/${{ github.base_ref }}..${{ github.event.pull_request.head.sha }}")"
+
+          if [ -z "$subjects" ]; then
+            echo "No commits to check."
+            exit 0
+          fi
+
+          failed=0
+          while IFS= read -r subject; do
+            if printf '%s' "$subject" | grep -Eq "$pattern"; then
+              echo "ok   $subject"
+            else
+              echo "FAIL $subject"
+              failed=1
+            fi
+          done <<< "$subjects"
+
+          if [ "$failed" -ne 0 ]; then
+            cat <<'MESSAGE'
+
+          A commit subject does not follow Conventional Commits.
+
+            <type>[(<scope>)][!]: <description>
+
+          Types: build, chore, ci, docs, feat, fix, perf, refactor,
+                 revert, style, test
+
+          `fix:` gives a patch release, `feat:` a minor one, a trailing
+          `!` or a `BREAKING CHANGE:` footer a major one. Everything
+          else does not release on its own.
+
+          Examples:
+            fix: keep a nil result out of amap
+            feat(interop): add cb->c arity for node style callbacks
+            feat!: pass foreign exceptions through unwrapped
+          MESSAGE
+            exit 1
+          fi

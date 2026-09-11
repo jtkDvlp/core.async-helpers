@@ -1,0 +1,94 @@
+name: Release
+
+# NOTE: Only the main branch. release-please collects the commits since
+#       the last tag, derives the next version from them and opens a
+#       release PR. Tag and GitHub release appear when *that* PR is
+#       merged — nothing is ever published without a PR somebody looked
+#       at.
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    name: Release PR
+    runs-on: ubuntu-latest
+
+    outputs:
+      released: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+
+    steps:
+      - name: Update version and changelog
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # WATCHOUT: This job belongs in the same workflow run, not in a
+  #           separate `on: release` workflow. A release created by the
+  #           GITHUB_TOKEN does not trigger further workflows — a
+  #           separate one would silently never run.
+  clojars:
+    name: Publish to Clojars
+    needs: release-please
+    if: needs.release-please.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # NOTE: The tag, deliberately, not the branch. By the time this
+      #       job runs, master may already carry the next commit;
+      #       published is exactly the state that is the release.
+      - name: Check out the release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag }}
+
+      - name: Set up the JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # NOTE: Same pinned Leiningen as in ci.yml, for the same reason.
+      - name: Set up Leiningen
+        run: |
+          mkdir -p "$HOME/bin"
+          curl -fsSL -o "$HOME/bin/lein" \
+            https://raw.githubusercontent.com/technomancy/leiningen/2.12.0/bin/lein
+          chmod +x "$HOME/bin/lein"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Restore the dependency cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.lein/self-installs
+          key: ${{ runner.os }}-m2-${{ hashFiles('project.clj') }}
+          restore-keys: ${{ runner.os }}-m2-
+
+      # NOTE: The tests run a second time here. On the PR they ran
+      #       against the state *before* the version bump — here against
+      #       exactly the artifact about to be published. Publishing
+      #       cannot be taken back: Clojars refuses a second upload of
+      #       the same version.
+      # NOTE: The same test run as in ci.yml. Whatever gets added
+      #       there belongs here too — this is the last gate before
+      #       something leaves the house.
+      - name: Test (Clojure)
+        run: lein test
+
+      - name: Publish
+        run: lein deploy clojars
+        env:
+          CLOJARS_USERNAME: ${{ secrets.CLOJARS_USERNAME }}
+          CLOJARS_PASSWORD: ${{ secrets.CLOJARS_DEPLOY_TOKEN }}

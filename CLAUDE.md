@@ -135,3 +135,56 @@ Wer einen davon behebt, entfernt die Markierung mit.
 eine Ausnahme, bevor eine Assertion greift, meldet der Test das; läuft er
 gar nicht an, meldet niemand etwas. Deshalb prüft jeder Test mindestens
 eine Zusicherung.
+
+## Versionierung und Release
+
+Die Version wird **nicht von Hand** gepflegt. Sie ergibt sich aus den
+Commit-Nachrichten, und die folgen deshalb
+[Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/):
+
+```
+<typ>[(<bereich>)][!]: <beschreibung>
+```
+
+`fix:` ergibt eine Patch-Version, `feat:` eine Minor-Version, ein `!`
+oder ein `BREAKING CHANGE:`-Footer eine Major-Version. Alles andere
+(`docs:`, `test:`, `ci:`, `chore:`, `refactor:`, `style:`, `perf:`,
+`build:`, `revert:`) löst für sich kein Release aus, taucht aber im
+Changelog auf.
+
+**Die Regel gilt für jeden einzelnen Commit, nicht nur für den
+PR-Titel.** PRs werden gemergt und nicht gesquasht — jeder Commit des
+Branches landet also auf `master` und wird dort gelesen.
+`.github/workflows/commit-messages.yml` prüft das bei jedem PR; ein
+Merge-Commit ist ausgenommen, dessen Betreff stammt von git.
+
+Der Ablauf danach (`.github/workflows/release.yml`):
+
+| Schritt | Was passiert |
+|---|---|
+| Merge auf `master` | release-please öffnet bzw. aktualisiert einen Release-PR mit der nächsten Version in `project.clj` und den Changelog-Einträgen. |
+| Release-PR mergen | Tag und GitHub-Release entstehen. |
+| Derselbe Workflow-Lauf | testet den getaggten Stand und deployt nach Clojars. |
+
+Veröffentlicht wird also nie ohne einen PR, den jemand angesehen hat.
+
+Drei Stellen, die man kennen muss, bevor man daran etwas ändert:
+
+- **`;; x-release-please-version`** hinter der Version in `project.clj`.
+  Ohne diese Anmerkung findet release-please die Version dort nicht und
+  bumpt nur das Changelog.
+- **`include-v-in-tag: false`** in `release-please-config.json`. Die
+  vorhandenen Tags heißen `3.6.1`, nicht `v3.6.1`. Mit `v` würde
+  release-please die Historie nicht wiederfinden und bei 1.0.0 anfangen.
+- **`.release-please-manifest.json`** hält den zuletzt veröffentlichten
+  Stand. Er wird von release-please fortgeschrieben, nicht von Hand.
+
+**WATCHOUT: Der Clojars-Job gehört in denselben Workflow-Lauf** wie
+release-please, nicht in einen eigenen `on: release`-Workflow. Ein
+Release, das der `GITHUB_TOKEN` erzeugt, löst keine weiteren Workflows
+aus — ein getrennter Workflow liefe stillschweigend nie.
+
+Die Zugangsdaten stehen als Repository-Secrets (`CLOJARS_USERNAME`,
+`CLOJARS_DEPLOY_TOKEN`) und kommen über `:env/`-Schlüssel in
+`project.clj` an. Lokal sind sie leer, dann fragt `lein deploy` wie
+gewohnt nach.

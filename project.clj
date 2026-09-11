@@ -1,4 +1,4 @@
-(defproject jtk-dvlp/core.async-helpers "3.6.1"
+(defproject jtk-dvlp/core.async-helpers "3.6.1" ;; x-release-please-version
   :description
   "Helper pack for core.async"
 
@@ -21,6 +21,31 @@
   :clean-targets
   ^{:protect false}
   [:target-path]
+
+  ;; NOTE: The credentials come from the environment, not from a file
+  ;;       — `:env/clojars_username` reads `CLOJARS_USERNAME`,
+  ;;       `:env/clojars_password` reads `CLOJARS_PASSWORD`. In CI those
+  ;;       hold a Clojars deploy token and the matching user name, taken
+  ;;       from the repository secrets. Locally they are unset, and lein
+  ;;       asks as it always did.
+  ;;
+  ;;       `:sign-releases false` because lein otherwise insists on a
+  ;;       GPG signature and CI has no key. Clojars does not require
+  ;;       one. Turning it back on needs a key in the run, not just the
+  ;;       flag flipped.
+  :deploy-repositories
+  [["clojars"
+    {:url
+     "https://repo.clojars.org/"
+
+     :username
+     :env/clojars_username
+
+     :password
+     :env/clojars_password
+
+     :sign-releases
+     false}]]
 
   :dependencies
   [[org.clojure/clojure "1.11.3"]

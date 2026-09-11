@@ -97,6 +97,9 @@ Commits](https://www.conventionalcommits.org/en/v1.0.0/):
 <type>[(<scope>)][!]: <description>
 ```
 
+The `!` marks a breaking change and belongs to the type, not to
+`feat` — `fix!:` is just as valid and means a bug fix that breaks.
+
 Pull requests are merged, not squashed, so every commit of a branch ends
 up on `master` — the convention applies to each of them, not just to the
 pull request title. A CI job checks this on every pull request.
@@ -107,7 +110,7 @@ The type decides the next version:
 |---|---|
 | `fix: …` | patch — `3.6.1` → `3.6.2` |
 | `feat: …` | minor — `3.6.1` → `3.7.0` |
-| `feat!: …`, or a `BREAKING CHANGE:` footer | major — `3.6.1` → `4.0.0` |
+| any type with a `!`, or a `BREAKING CHANGE:` footer | major — `3.6.1` → `4.0.0` |
 | `docs:`, `test:`, `ci:`, `chore:`, `refactor:`, `style:`, `perf:`, `build:`, `revert:` | none on its own |
 
 ### Releasing

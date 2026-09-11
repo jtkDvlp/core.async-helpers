@@ -86,6 +86,47 @@ Pay attention mixing up error propagation functions of this library and clojure.
 ```
 
 
+## Contributing
+
+### Commit messages
+
+Commit subjects follow [Conventional
+Commits](https://www.conventionalcommits.org/en/v1.0.0/):
+
+```
+<type>[(<scope>)][!]: <description>
+```
+
+Pull requests are merged, not squashed, so every commit of a branch ends
+up on `master` — the convention applies to each of them, not just to the
+pull request title. A CI job checks this on every pull request.
+
+The type decides the next version:
+
+| Subject | Release |
+|---|---|
+| `fix: …` | patch — `3.6.1` → `3.6.2` |
+| `feat: …` | minor — `3.6.1` → `3.7.0` |
+| `feat!: …`, or a `BREAKING CHANGE:` footer | major — `3.6.1` → `4.0.0` |
+| `docs:`, `test:`, `ci:`, `chore:`, `refactor:`, `style:`, `perf:`, `build:`, `revert:` | none on its own |
+
+### Releasing
+
+Releasing is automatic; nobody edits a version number by hand.
+
+1. A merge to `master` lets
+   [release-please](https://github.com/googleapis/release-please) open or
+   update a release pull request. It carries the next version in
+   `project.clj` and the changelog entries derived from the commits since
+   the last release.
+2. Merging that pull request creates the git tag and the GitHub release.
+3. The same workflow run then tests the tagged state and pushes the
+   artifact to Clojars.
+
+So the release pull request is the point where a release is decided —
+until it is merged, nothing leaves the house.
+
+
 ## Appendix
 
 I´d be thankful to receive patches, comments and constructive criticism.

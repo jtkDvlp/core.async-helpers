@@ -163,7 +163,15 @@
       The exception travels as itself — same class, same message, same
       `ex-data`. Only a thrown value that is not an exception at all is
       lifted into one, which ClojureScript allows. Take the result with
-      `<!` to have it thrown again."
+      `<!` to have it thrown again.
+
+      WATCHOUT: On the JVM an `Error` is deliberately *not* caught. A
+      `StackOverflowError` or `OutOfMemoryError` says the machine is in
+      trouble, not that this computation failed; handing it on as an
+      ordinary channel value would let the program carry on as if it
+      could. It escapes into core.async's thread instead, which closes
+      the channel. ClojureScript has no such distinction — everything
+      there descends from `js/Error`."
      [& body]
      (if (:ns &env)
        `(cljs.core.async/go
@@ -174,7 +182,7 @@
        `(clojure.core.async/go
           (try
             ~@body
-            (catch Throwable e#
+            (catch Exception e#
               e#))))))
 
 #?(:clj
@@ -295,7 +303,9 @@
             (fn []
               (try
                 (f)
-                (catch Throwable e
+                ;; NOTE: `Exception`, not `Throwable` — same boundary as
+                ;;       `go`, see the WATCHOUT there.
+                (catch Exception e
                   e)))]
 
         (if thread-call-takes-workload?
@@ -340,7 +350,7 @@
          (when-let [e (first (filter exception? args))]
            (athrow e))
          (apply f args)
-         (catch #?(:cljs :default :clj Throwable) e#
+         (catch #?(:cljs :default :clj Exception) e#
            (->exception "unknown" :unknown e#))))
      chs)))
 
@@ -457,7 +467,7 @@
        (when (exception? v)
          (athrow v))
        (f accu v)
-       (catch #?(:cljs :default :clj Throwable) e#
+       (catch #?(:cljs :default :clj Exception) e#
          (reduced (->exception "unknown" :unknown e#)))))
    init ch))
 

@@ -37,6 +37,12 @@ you are not the same thing. The per-version documentation lives on
   an `ExceptionInfo`, now with the value under `:error`. Without that it
   would arrive on the channel indistinguishable from a result.
 
+- **`Error` is no longer caught on the JVM.** A `StackOverflowError` or
+  `OutOfMemoryError` used to become an ordinary channel value, letting the
+  program carry on as if it could. It now escapes into core.async's thread,
+  which closes the channel. Catching is `Exception` in `go`, `thread-call`
+  and `cb->c`. ClojureScript has no such distinction.
+
 - `exception?` answers whether a value is a carried error, and that is now
   anything throwable — a `Throwable` on the JVM, a `js/Error` in
   ClojureScript. It used to accept `ExceptionInfo` only.

@@ -175,7 +175,9 @@
 
              (try
                (~f ~@forms')
-               (catch Throwable e#
+               ;; NOTE: `Exception`, not `Throwable` — same boundary as
+               ;;       `jtk-dvlp.async/go`, see the WATCHOUT there.
+               (catch Exception e#
                  (clojure.core.async/put! c# e#)
                  (clojure.core.async/close! c#)))
              c#))))))

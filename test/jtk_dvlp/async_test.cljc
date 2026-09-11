@@ -22,7 +22,7 @@
       [cljs.core.async :as core-async])
 
    [jtk-dvlp.async :as a]
-   [jtk-dvlp.async.test-support :refer [deftest-async]])
+   [jtk-dvlp.async.test-support :as test-support :refer [deftest-async]])
 
   #?(:clj
      (:import
@@ -226,6 +226,42 @@
 
     (is (identical? thrown caught)
         "not the ExceptionInfo branch, and the same instance")))
+
+#?(:clj
+   (deftest go-does-not-catch-an-error
+     ;; WATCHOUT: An `Error` says the machine is in trouble, not that
+     ;;           this computation failed — handing it on as a channel
+     ;;           value would let the program carry on as if it could.
+     ;;           It escapes into core.async's thread instead, which
+     ;;           closes the channel, so the take yields nil.
+     ;;
+     ;;
+     ;; NOTE: The handler is swapped for two reasons at once. It waits
+     ;;       for the escape — core.async closes the channel *before*
+     ;;       rethrowing, so without the wait the test would end while
+     ;;       the error is still in flight — and it keeps the trace out
+     ;;       of the test output, which restoring too early would not.
+     (let [escaped
+           (promise)
+
+           previous
+           (Thread/getDefaultUncaughtExceptionHandler)]
+
+       (try
+         (Thread/setDefaultUncaughtExceptionHandler
+          (reify Thread$UncaughtExceptionHandler
+            (uncaughtException [_ _thread throwable]
+              (deliver escaped throwable))))
+
+         (is (nil? (core-async/<!! (a/go (throw (StackOverflowError. "deep")))))
+             "the channel is closed, the error is not its value")
+
+         (is (instance? StackOverflowError
+                        (deref escaped test-support/timeout-ms nil))
+             "and it really left the block")
+
+         (finally
+           (Thread/setDefaultUncaughtExceptionHandler previous))))))
 
 ;;; --- <! ---------------------------------------------------------------
 

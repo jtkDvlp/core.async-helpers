@@ -45,9 +45,11 @@
        (put-n-close! c)))
 
 (defn p->c
-  "Turns promise `p` into a `promise-chan` carrying its value, or an
-   `ExceptionInfo` if the promise is rejected. A rejection that already
-   is an `ExceptionInfo` keeps its message and data.
+  "Turns promise `p` into a `promise-chan` carrying its value, or its
+   error if the promise is rejected. A rejection that is an exception
+   travels as itself; anything else — a promise may reject with any
+   value at all — is lifted into an `ExceptionInfo` with
+   `{:code :promise-error}` and the value under `:error`.
 
    WATCHOUT: The channel is closed once the value is on it, but it is a
    `promise-chan` — it hands out its buffered value on every take, also
@@ -110,8 +112,8 @@
    Without arguments it is just that, empty. Given `f`, it is called
    with two one-argument functions, `resolve` and `reject`, to fill the
    channel — the same shape as a JavaScript promise executor. A
-   rejection value that is not already an `ExceptionInfo` is wrapped
-   into one as its cause."
+   rejection that is an exception travels as itself; anything else is
+   lifted into an `ExceptionInfo`."
   ([]
    (async/promise-chan))
 

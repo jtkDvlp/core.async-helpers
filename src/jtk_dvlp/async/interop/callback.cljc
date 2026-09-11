@@ -48,10 +48,11 @@
 
       The callbacks of `exp` must take exactly one argument.
 
-      A rejection that is not already an `ExceptionInfo` is wrapped
-      into one with `{:code :callback-error}` as its cause. If calling
-      `exp` itself throws, that error goes onto the channel too, and
-      the channel is closed.
+      A rejection that is an exception travels as itself; anything
+      else is lifted into an `ExceptionInfo` with
+      `{:code :callback-error}` and the value under `:error`. If
+      calling `exp` itself throws, that error goes onto the channel
+      too, and the channel is closed.
 
       With `auto-close?` (the default) the channel is closed after the
       first put, whether resolution or rejection — right for a call
@@ -139,15 +140,12 @@
 
              (try
                (~f ~@forms')
-               (catch cljs.core/ExceptionInfo e#
-                 (cljs.core.async/put! c# e#)
-                 (cljs.core.async/close! c#))
                (catch :default e#
-                 (cljs.core.async/put!
-                  c#
-                  (ex-info
-                   "callback based function error"
-                   {:code :callback-based-function-error} e#))
+                 (->> e#
+                      (jtk-dvlp.async/->exception
+                       "callback based function error"
+                       :callback-based-function-error)
+                      (cljs.core.async/put! c#))
                  (cljs.core.async/close! c#)))
              c#)
 
@@ -177,15 +175,8 @@
 
              (try
                (~f ~@forms')
-               (catch clojure.lang.ExceptionInfo e#
-                 (clojure.core.async/put! c# e#)
-                 (clojure.core.async/close! c#))
                (catch Throwable e#
-                 (clojure.core.async/put!
-                  c#
-                  (ex-info
-                   "callback based function error"
-                   {:code :callback-based-function-error} e#))
+                 (clojure.core.async/put! c# e#)
                  (clojure.core.async/close! c#)))
              c#))))))
 

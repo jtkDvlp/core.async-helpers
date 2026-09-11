@@ -13,9 +13,11 @@
    the block that failed and the one that asked for the value. See
    `athrow`.
 
-   Everything in this namespace propagates errors that way. Anything
-   thrown that is not an `ExceptionInfo` is converted into one carrying
-   `{:code :unknown}`, with the original as its cause.
+   Everything in this namespace propagates errors that way, and an
+   exception travels as itself: the class, message and `ex-data` that
+   were thrown are the ones caught. Only a thrown value that is no
+   exception at all — which ClojureScript allows — is lifted into an
+   `ExceptionInfo` carrying `{:code :unknown, :error x}`.
 
    WATCHOUT: Do not mix these with `clojure.core.async`. Propagation
    only works because the error is an ordinary value on the channel — a
@@ -41,7 +43,7 @@
   #?(:clj
      (:import
       [java.lang Thread StackTraceElement]
-      [clojure.lang ExceptionInfo MapEntry]
+      [clojure.lang MapEntry]
       [clojure.core.async.impl.channels ManyToManyChannel]))
 
   ,,,)
@@ -53,45 +55,39 @@
   (instance? ManyToManyChannel x))
 
 (defn exception?
-  "Is `x` a carried error, i.e. an `ExceptionInfo`?
+  "Is `x` a carried error, i.e. anything the platform can throw?
 
-   Only `ExceptionInfo` counts. That is not an oversight: `go` converts
-   everything else into one first, and only then is it a value the
-   propagation can carry."
-  [x]
-  (instance? ExceptionInfo x))
+   On the JVM a `Throwable`, in ClojureScript a `js/Error`. Everything
+   throwable travels as itself, so this is the same question as \"may
+   `<!` throw this again?\".
 
-(defn throwable?
-  "Is `x` something the platform can throw and carry as a `cause`?
-
-   On the JVM a `Throwable`, in ClojureScript a `js/Error`. Narrower
-   than `exception?`, which asks the different question of whether `x`
-   is a *carried* error."
+   WATCHOUT: This is also the reason an exception cannot be a payload.
+   A value that happens to be an exception object is read as an error
+   here, not as a result. Wrap it if you mean it as data."
   [x]
   (instance? #?(:clj Throwable :cljs js/Error) x))
 
 (defn ->exception
-  "Turns any `x` into an `ExceptionInfo` carrying `code`, so it can
-   travel a channel as an error.
+  "Turns `x` into something that can travel a channel as an error.
 
-   An `ExceptionInfo` is handed back untouched — whoever built it meant
-   its message and data. Anything else throwable becomes the `cause`.
-   Anything else at all lands under `:error` in the `ex-data`.
+   Anything throwable is handed back untouched — the caller built it
+   and means it. Anything else is lifted into an `ExceptionInfo` with
+   `code` and the value under `:error`.
 
-   WATCHOUT: That last case is why this exists. `clojure.core/ex-info`
-   demands a `Throwable` in the `cause` position and throws a
-   `ClassCastException` on anything else, while ClojureScript takes
-   whatever it is given. Putting a plain rejection value into `cause`
-   therefore blew up on one platform and quietly worked on the other."
+   WATCHOUT: That second case is why this exists, and it is not a JVM
+   concern. JavaScript lets you `throw 42`, and a promise may reject
+   with anything at all. Such a value must be lifted, or it would
+   arrive on the channel indistinguishable from a result and the error
+   would vanish without a sound.
+
+   NOTE: The lifted value goes under `:error` in the `ex-data`, not
+   into the `cause`. `clojure.core/ex-info` demands a `Throwable`
+   there and throws a `ClassCastException` on anything else, while
+   ClojureScript takes whatever it is given — the same code blew up on
+   one platform and quietly worked on the other."
   [message code x]
-  (cond
-    (exception? x)
+  (if (exception? x)
     x
-
-    (throwable? x)
-    (ex-info message {:code code} x)
-
-    :else
     (ex-info message {:code code, :error x})))
 
 #?(:clj
@@ -164,25 +160,22 @@
      "Like `core.async/go`, but an exception thrown in `body` becomes
       the block's result instead of being swallowed.
 
-      An `ExceptionInfo` is carried as is; anything else is converted
-      into one with `{:code :unknown}` and the original as its cause.
-      Take the result with `<!` to have it thrown again."
+      The exception travels as itself — same class, same message, same
+      `ex-data`. Only a thrown value that is not an exception at all is
+      lifted into one, which ClojureScript allows. Take the result with
+      `<!` to have it thrown again."
      [& body]
      (if (:ns &env)
        `(cljs.core.async/go
           (try
             ~@body
-            (catch cljs.core/ExceptionInfo e#
-              e#)
             (catch :default e#
-              (ex-info "unknown" {:code :unknown} e#))))
+              (jtk-dvlp.async/->exception "unknown" :unknown e#))))
        `(clojure.core.async/go
           (try
             ~@body
-            (catch clojure.lang.ExceptionInfo e#
-              e#)
             (catch Throwable e#
-              (ex-info "unknown" {:code :unknown} e#)))))))
+              e#))))))
 
 #?(:clj
    (defmacro go-loop
@@ -199,8 +192,11 @@
 
       This is what propagates an error up the go block stack: inside a
       `go` the throw is caught again and becomes that block's result,
-      so the error keeps climbing until someone catches it. Catch it
-      with an ordinary `try`/`catch` on `ExceptionInfo`."
+      so the error keeps climbing until someone catches it.
+
+      WATCHOUT: Catch what was actually thrown. Since exceptions travel
+      as themselves, a `catch ExceptionInfo` no longer sees a foreign
+      exception — that needs `Exception` (JVM) or `:default` (cljs)."
      [?exp]
      (if (:ns &env)
        `(let [v# (cljs.core.async/<! ~?exp)]
@@ -299,10 +295,8 @@
             (fn []
               (try
                 (f)
-                (catch clojure.lang.ExceptionInfo e
-                  e)
                 (catch Throwable e
-                  (ex-info "unknown" {:code :unknown} e))))]
+                  e)))]
 
         (if thread-call-takes-workload?
           (async/thread-call carry-exception workload)
@@ -346,10 +340,8 @@
          (when-let [e (first (filter exception? args))]
            (athrow e))
          (apply f args)
-         (catch ExceptionInfo e#
-           e#)
          (catch #?(:cljs :default :clj Throwable) e#
-           (ex-info "unknown" {:code :unknown} e#))))
+           (->exception "unknown" :unknown e#))))
      chs)))
 
 (defn all
@@ -465,10 +457,8 @@
        (when (exception? v)
          (athrow v))
        (f accu v)
-       (catch ExceptionInfo e#
-         (reduced e#))
        (catch #?(:cljs :default :clj Throwable) e#
-         (reduced (ex-info "unknown" {:code :unknown} e#)))))
+         (reduced (->exception "unknown" :unknown e#)))))
    init ch))
 
 (defn areduce

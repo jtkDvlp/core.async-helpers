@@ -121,6 +121,10 @@ So within a go block stack that should propagate, take with `jtk-dvlp.async/<!` 
 
 The `catch` sees the error from `<fail-during-some-async-stuff` even though it was thrown in a different go block, on a different thread. `<do-some-async-stuff :c` is never reached, just as it would not be in synchronous code.
 
+**Catch what was actually thrown.** An exception travels as itself — the class, message and `ex-data` that were thrown are the ones you catch. The example above catches `ExceptionInfo` because that is what it throws; a foreign exception needs `Exception` on the JVM or `:default` in ClojureScript. Only a thrown value that is no exception at all (ClojureScript lets you `throw 42`) is lifted into an `ExceptionInfo`, with the value under `:error`.
+
+Up to 3.x everything was converted into an `ExceptionInfo` first, so `catch ExceptionInfo` saw every error. If you are upgrading from 3.x, that is the one thing to go through your handlers for — see the [changelog](CHANGELOG.md).
+
 ## Development
 
 ```bash

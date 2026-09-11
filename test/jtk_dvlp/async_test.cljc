@@ -64,17 +64,11 @@
     (inc x)))
 
 (defn- foreign-exception
-  "An exception that is *not* an `ExceptionInfo` — `go` is supposed to
-   convert it into one."
+  "An exception that is *not* an `ExceptionInfo` — the propagation is
+   supposed to carry it unchanged."
   [message]
   #?(:clj (RuntimeException. message)
      :cljs (js/Error. message)))
-
-(defn- cause-message
-  [exception]
-  (let [cause (ex-cause exception)]
-    #?(:clj (.getMessage ^Throwable cause)
-       :cljs (.-message cause))))
 
 (defn- stacktrace-text
   "The stack trace as one piece of text, searchable on both platforms."
@@ -100,29 +94,20 @@
     (is (not (a/chan? 42)))
     (is (not (a/chan? [1 2 3])))))
 
-(deftest exception?-only-accepts-exception-info
+(deftest exception?-accepts-anything-throwable
   (is (a/exception? (ex-info "x" {})))
 
-  (testing "a foreign exception does not count"
-    ;; NOTE: On purpose, not an oversight. `go` converts every foreign
-    ;;       exception into an `ExceptionInfo` first; only then is it a
-    ;;       value the propagation can carry.
-    (is (not (a/exception? (foreign-exception "x")))))
+  (testing "a foreign exception counts just as much"
+    ;; NOTE: This is the whole point of the 4.0.0 change. Exceptions
+    ;;       travel as themselves, so \"is this a carried error?\" and
+    ;;       \"can this be thrown?\" are the same question.
+    (is (a/exception? (foreign-exception "x"))))
 
   (testing "plain values are not exceptions"
     (is (not (a/exception? nil)))
     (is (not (a/exception? 42)))
+    (is (not (a/exception? :bad)))
     (is (not (a/exception? {:code :x})))))
-
-(deftest throwable?-detects-throwables
-  (is (a/throwable? (ex-info "x" {})))
-  (is (a/throwable? (foreign-exception "x")))
-
-  (testing "ordinary values cannot be thrown"
-    (is (not (a/throwable? nil)))
-    (is (not (a/throwable? 42)))
-    (is (not (a/throwable? :bad)))
-    (is (not (a/throwable? {:code :x})))))
 
 (deftest ->exception-passes-exception-info-through
   ;; NOTE: Whoever already holds an `ExceptionInfo` meant its message
@@ -131,14 +116,13 @@
     (is (identical? original
                     (a/->exception "shell" :shell original)))))
 
-(deftest ->exception-makes-foreign-error-the-cause
-  (let [result
-        (a/->exception "shell" :shell (foreign-exception "raw"))]
-
-    (is (a/exception? result))
-    (is (= "shell" (ex-message result)))
-    (is (= {:code :shell} (ex-data result)))
-    (is (= "raw" (cause-message result)))))
+(deftest ->exception-passes-a-foreign-exception-through
+  ;; NOTE: Up to 3.x this became the `cause` of a fresh `ExceptionInfo`
+  ;;       carrying `{:code :shell}`. It is handed back untouched now —
+  ;;       the identity check is the point of the test.
+  (let [original (foreign-exception "raw")]
+    (is (identical? original
+                    (a/->exception "shell" :shell original)))))
 
 (deftest ->exception-lifts-a-plain-value-into-the-data
   ;; NOTE: The case this exists for. `clojure.core/ex-info` demands a
@@ -174,15 +158,21 @@
     (is (= "broken" (ex-message result)))
     (is (= {:code :broken} (ex-data result)))))
 
-(deftest-async go-converts-foreign-exception
-  (let [result
-        (core-async/<! (a/go (throw (foreign-exception "raw"))))]
+(deftest-async go-carries-a-foreign-exception-unchanged
+  ;; NOTE: Up to 3.x this arrived as an `ExceptionInfo` carrying
+  ;;       `{:code :unknown}` with the original as its cause. Since
+  ;;       4.0.0 it is the original itself — class, message and all.
+  (let [thrown
+        (foreign-exception "raw")
 
-    (is (a/exception? result))
-    (is (= {:code :unknown} (ex-data result))
-        "the conversion marks itself as one")
-    (is (= "raw" (cause-message result))
-        "the original exception survives as the cause")))
+        result
+        (core-async/<! (a/go (throw thrown)))]
+
+    (is (identical? thrown result)
+        "the very instance that was thrown")
+    (is (= "raw" (ex-message result)))
+    (is (nil? (ex-data result))
+        "nothing was wrapped around it")))
 
 (deftest-async go-loop-runs-to-completion
   (is (= 10 (a/<! (a/go-loop [sum 0, [x & more] [1 2 3 4]]
@@ -200,6 +190,42 @@
     (is (a/exception? result))
     (is (= {:code :loop} (ex-data result)))))
 
+
+#?(:cljs
+   (deftest-async go-lifts-a-thrown-value-that-is-no-exception
+     ;; WATCHOUT: The safety net of the pass-through. JavaScript lets
+     ;;           you `throw 42`; such a value must be lifted, or it
+     ;;           would arrive on the channel indistinguishable from a
+     ;;           result and the error would vanish without a sound.
+     ;;           ClojureScript only — the JVM throws nothing but a
+     ;;           `Throwable`.
+     (let [result (core-async/<! (a/go (throw 42)))]
+       (is (a/exception? result))
+       (is (= {:code :unknown, :error 42} (ex-data result))))))
+
+(deftest-async a-foreign-exception-is-caught-as-what-it-is
+  ;; WATCHOUT: This is the breaking half of 4.0.0. Up to 3.x a `catch
+  ;;           ExceptionInfo` saw every error, because everything was
+  ;;           converted into one. It no longer does — a foreign
+  ;;           exception needs `Exception` (JVM) or `:default` (cljs).
+  (let [thrown
+        (foreign-exception "raw")
+
+        caught
+        ;; NOTE: `core-async/<!`, because the block hands the caught
+        ;;       exception back as its value — `a/<!` would throw it
+        ;;       again and the assertion would never be reached.
+        (core-async/<! (a/go
+                         (try
+                           (a/<! (a/go (throw thrown)))
+                           (catch #?(:clj ExceptionInfo
+                                     :cljs cljs.core/ExceptionInfo) e
+                             ::caught-as-ex-info)
+                           (catch #?(:clj Exception :cljs :default) e
+                             e))))]
+
+    (is (identical? thrown caught)
+        "not the ExceptionInfo branch, and the same instance")))
 
 ;;; --- <! ---------------------------------------------------------------
 
@@ -326,15 +352,15 @@
        (is (= {:code :thread} (ex-data result))))))
 
 #?(:clj
-   (deftest thread-call-converts-foreign-exception
-     (let [result
-           (core-async/<!!
-            (a/thread-call
-             (fn [] (throw (foreign-exception "raw")))))]
+   (deftest thread-call-carries-a-foreign-exception-unchanged
+     (let [thrown
+           (foreign-exception "raw")
 
-       (is (a/exception? result))
-       (is (= {:code :unknown} (ex-data result)))
-       (is (= "raw" (cause-message result))))))
+           result
+           (core-async/<!! (a/thread-call (fn [] (throw thrown))))]
+
+       (is (identical? thrown result))
+       (is (nil? (ex-data result))))))
 
 #?(:clj
    (deftest thread-yields-result

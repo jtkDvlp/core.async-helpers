@@ -12,6 +12,38 @@ you are not the same thing. The per-version documentation lives on
 
 ## [Unreleased]
 
+### Changed — breaking
+
+- **An exception now travels as itself.** Up to 3.x everything that was not
+  already an `ExceptionInfo` was converted into one carrying
+  `{:code :unknown}`, with the original as its `cause`. A `RuntimeException`
+  or a plain `js/Error` is now carried and rethrown unchanged — same class,
+  same message, same `ex-data`.
+
+  **What breaks:** `(catch ExceptionInfo e …)` was the documented pattern and
+  no longer sees a foreign exception. It needs `Exception` on the JVM and
+  `:default` in ClojureScript. The break is a quiet one — the error does not
+  disappear, it climbs past the `catch` to the next one, or out of the
+  program. Anyone catching `ExceptionInfo` should go through their handlers
+  before upgrading.
+
+  `(ex-data e)` is `nil` for such an exception; the `{:code …}` convention
+  now only holds for what this library builds itself. This applies wherever
+  an error enters: `go`, `go-loop`, `thread`, `thread-call`, `map`, `reduce`,
+  `cb->c` and the promise interop.
+
+  A thrown value that is *no* exception at all — ClojureScript lets you
+  `throw 42`, and a promise may reject with anything — is still lifted into
+  an `ExceptionInfo`, now with the value under `:error`. Without that it
+  would arrive on the channel indistinguishable from a result.
+
+- `exception?` answers whether a value is a carried error, and that is now
+  anything throwable — a `Throwable` on the JVM, a `js/Error` in
+  ClojureScript. It used to accept `ExceptionInfo` only.
+
+- `->exception` hands anything throwable back untouched instead of making it
+  the `cause` of a fresh `ExceptionInfo`.
+
 ### Fixed
 
 - `thread` and `thread-call` were unusable and always threw an
@@ -44,8 +76,8 @@ you are not the same thing. The per-version documentation lives on
 
 ### Added
 
-- `throwable?` and `->exception`. Public because the expansion of `cb->c` runs
-  in the caller's namespace.
+- `->exception`. Public because the expansion of `cb->c` runs in the caller's
+  namespace.
 - A test suite covering every public function and macro on both platforms,
   running in CI on every push and pull request.
 

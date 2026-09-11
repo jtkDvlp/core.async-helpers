@@ -155,14 +155,19 @@
     (is (a/exception? result))
     (is (= {:code :call} (ex-data result)))))
 
-(deftest-async cb->c-wraps-foreign-exceptions-from-the-call
-  (let [result
-        (core-async/<!
-         (callback/cb->c
-          (call-and-throw (foreign-exception "raw") callback)))]
+(deftest-async cb->c-carries-a-foreign-exception-from-the-call-unchanged
+  ;; NOTE: Up to 3.x this arrived wrapped in an `ExceptionInfo` with
+  ;;       `{:code :callback-based-function-error}`. Since 4.0.0 an
+  ;;       exception travels as itself.
+  (let [thrown
+        (foreign-exception "raw")
 
-    (is (a/exception? result))
-    (is (= {:code :callback-based-function-error} (ex-data result)))))
+        result
+        (core-async/<!
+         (callback/cb->c (call-and-throw thrown callback)))]
+
+    (is (identical? thrown result))
+    (is (nil? (ex-data result)))))
 
 
 ;;; --- <cb! -------------------------------------------------------------

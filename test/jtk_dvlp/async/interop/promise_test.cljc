@@ -96,17 +96,34 @@
     (is (= :once (a/<! c)))))
 
 #?(:cljs
-   (deftest-async p->c-wraps-foreign-rejections
+   (deftest-async p->c-carries-a-foreign-rejection-unchanged
      ;; NOTE: ClojureScript only. On the JVM a rejection cannot be
      ;;       "foreign" — there is no rejection path there, see
      ;;       `rejected-promise`.
-     (let [result
+     ;;
+     ;;       Up to 3.x this arrived wrapped in an `ExceptionInfo` with
+     ;;       `{:code :promise-error}`. Since 4.0.0 an exception travels
+     ;;       as itself.
+     (let [rejected-with
+           (js/Error. "raw")
+
+           result
            (core-async/<!
-            (promise/p->c (rejected-promise (js/Error. "raw"))))]
+            (promise/p->c (rejected-promise rejected-with)))]
+
+       (is (identical? rejected-with result))
+       (is (nil? (ex-data result))))))
+
+#?(:cljs
+   (deftest-async p->c-lifts-a-rejection-that-is-no-exception
+     ;; WATCHOUT: A promise may reject with anything — `(reject 42)` is
+     ;;           legal. Such a value must be lifted, or it would arrive
+     ;;           on the channel indistinguishable from a resolution.
+     (let [result
+           (core-async/<! (promise/p->c (rejected-promise 42)))]
 
        (is (a/exception? result))
-       (is (= {:code :promise-error} (ex-data result)))
-       (is (= "raw" (.-message (ex-cause result)))))))
+       (is (= {:code :promise-error, :error 42} (ex-data result))))))
 
 #?(:clj
    (def ^:private p->c-max-blocking-ms

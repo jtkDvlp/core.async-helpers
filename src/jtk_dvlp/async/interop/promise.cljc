@@ -1,4 +1,19 @@
 (ns jtk-dvlp.async.interop.promise
+  "Bridges promises and channels, in both directions, with the error
+   propagation of `jtk-dvlp.async`.
+
+   A rejected promise arrives on the channel as a carried error and is
+   thrown by `<!`; an error carried on a channel rejects the promise it
+   is turned into. So a `.then`/`.catch` chain and a go block stack can
+   be mixed without either side losing an error.
+
+   WATCHOUT: `promise` means different things on the two platforms. In
+   ClojureScript it is a `js/Promise` with `then` and `catch`. On the
+   JVM it is a `clojure.core/promise`, which has neither and only takes
+   a single `deliver` — there is no rejection there, only a delivered
+   exception value. The functions here even that out; where it still
+   shows through, it is said so."
+
   #?(:cljs
      (:require-macros
       [jtk-dvlp.async.interop.promise :refer [promise-go <p!]]))
@@ -26,17 +41,18 @@
 
 (defn- forward-error!
   [c e]
-  (cond->> e
-    (not (jtk-dvlp.async/exception? e))
-    (ex-info "promise error" {:code :promise-error})
-
-    :always
-    (put-n-close! c)))
+  (->> (jtk-dvlp.async/->exception "promise error" :promise-error e)
+       (put-n-close! c)))
 
 (defn p->c
-  "Creates a `promise-chan` and put the val of resolved promise `p`
-   or put an instance of `ExceptionInfo` if promise is rejected.
-   Closes the channel after took val."
+  "Turns promise `p` into a `promise-chan` carrying its value, or an
+   `ExceptionInfo` if the promise is rejected. A rejection that already
+   is an `ExceptionInfo` keeps its message and data.
+
+   WATCHOUT: The channel is closed once the value is on it, but it is a
+   `promise-chan` — it hands out its buffered value on every take, also
+   when closed. Closed here means \"takes nothing new\", not \"yields
+   nothing more\"."
   [p]
   (let [c (async/promise-chan)
 
@@ -71,8 +87,11 @@
      #(new js/Promise %)))
 
 (defn c->p
-  "Creates a promise and resolves it with the val of channel `c`
-   taken by `<!` or rejects it on exception (`ExceptionInfo`). Closes the channel after took val."
+  "Turns channel `c` into a promise: resolved with the channel's value,
+   rejected with it if it is a carried error. Closes `c` afterwards.
+
+   The counterpart of `p->c`, for handing a channel to code that
+   expects a promise."
   [c]
   (create-promise
    (fn [resolve reject]
@@ -85,12 +104,14 @@
           (resolve v)))))))
 
 (defn promise-chan
-  "Creates an promise like channel, see `core.async/promise-chan`.
+  "Creates a `promise-chan` — a channel that keeps its first value and
+   hands it out on every take. See `core.async/promise-chan`.
 
-   Given function `f` can be used to fill the promise.
-   `f` will be called with one arg functions `resolve` and `reject`
-   to resolve or reject the created promise. Rejection value will
-   be wrapped in `ExceptionInfo` as `cause`."
+   Without arguments it is just that, empty. Given `f`, it is called
+   with two one-argument functions, `resolve` and `reject`, to fill the
+   channel — the same shape as a JavaScript promise executor. A
+   rejection value that is not already an `ExceptionInfo` is wrapped
+   into one as its cause."
   ([]
    (async/promise-chan))
 
@@ -107,9 +128,12 @@
      p)))
 
 (defn ->promise-chan
-  "Ensure given channel `c` to be a `promise-chan`.
-   See `core.async/promise-chan` for more infos.
-   Auto closes channel `c`."
+  "Ensures channel `c` behaves like a `promise-chan`: its first value
+   is kept and handed out on every take, instead of being gone after
+   the first one. Closes `c` afterwards.
+
+   For a result several readers need, or one that is read more than
+   once."
   [c]
   (let [p (async/promise-chan)]
     (async/take!
@@ -121,7 +145,9 @@
 
 #?(:clj
    (defmacro promise-go
-     "Like `go` but returns a `promise-chan`."
+     "Like `jtk-dvlp.async/go`, but yields a `promise-chan`: the result
+      can be taken more than once, instead of being gone after the
+      first take."
      [& body]
      `(jtk-dvlp.async.interop.promise/->promise-chan
        (jtk-dvlp.async/go
@@ -129,7 +155,8 @@
 
 #?(:clj
    (defmacro <p!
-     "Like `<!` for promise via `p->c` convertion."
+     "Like `jtk-dvlp.async/<!`, but for a promise: takes its value, or
+      throws if it was rejected. Shorthand for `(<! (p->c ?exp))`."
      [?exp]
      `(jtk-dvlp.async/<!
        (jtk-dvlp.async.interop.promise/p->c
@@ -137,7 +164,10 @@
 
 #?(:clj
    (defmacro <p!!
-     "Like `<!!` for promise via `p->c` convertion."
+     "Like `jtk-dvlp.async/<!!`, but for a promise. Blocks the calling
+      thread.
+
+      Clojure only — ClojureScript has no blocking take."
      [?exp]
      `(jtk-dvlp.async/<!!
        (jtk-dvlp.async.interop.promise/p->c

@@ -1,4 +1,20 @@
 (ns jtk-dvlp.async.interop.callback
+  "Turns callback-based functions into channels, with the error
+   propagation of `jtk-dvlp.async`.
+
+   A callback API does not fit into a sequence of steps: the rest of
+   the work has to move inside the callback, and every further call
+   nests one level deeper. `cb->c` turns such a call into a channel, so
+   it reads like any other step in a go block — and a failure arrives
+   as a thrown error rather than as a second callback.
+
+   WATCHOUT: `cb->c` is a macro that *rewrites* the expression handed
+   to it. It looks for the symbols `callback`, `resolve` and `reject`
+   inside and puts its own functions in their place. Those symbols are
+   therefore written bare, without ever being defined — and they are
+   only found where they literally stand. Move a callback into a helper
+   function and the macro cannot see it any more."
+
   #?(:cljs
      (:require-macros
       [jtk-dvlp.async.interop.callback :refer [cb->c <cb!]]))
@@ -22,50 +38,54 @@
 
 #?(:clj
    (defmacro cb->c
-     "Creates a `chan` base on the callbacks of `exp`. Symbols
-      `callback` / `resolve` and `reject` marks the callback
-      position of `exp` to put resolutions and rejections onto
-      the new created channel. If no mark is given, assumes `resolve`
-      position is the last arg of `exp` and will append it.
+     "Creates a channel from the callbacks of `exp`.
 
-      `exp` callbacks must expect only one argument!
+      The symbols `callback`, `resolve` and `reject` mark the callback
+      positions in `exp`; whatever they are called with is put onto the
+      new channel — `reject` as a carried error. Without any mark, the
+      callback is assumed to be the last argument of `exp` and is
+      appended.
 
-      Rejections will be used as `cause` for a new created `ExceptionInfo`.
+      The callbacks of `exp` must take exactly one argument.
 
-      Given `auto-close?` `false` the caller of `cb->c` is responsible for
-      closing the channel! Otherwise channel will be closed after first put
-      (resolve or reject).
+      A rejection that is not already an `ExceptionInfo` is wrapped
+      into one with `{:code :callback-error}` as its cause. If calling
+      `exp` itself throws, that error goes onto the channel too, and
+      the channel is closed.
 
-      If calling `exp` fails an error / exception will be put onto the
-      new created channel with fail information. The channel will be
-      closed then.
+      With `auto-close?` (the default) the channel is closed after the
+      first put, whether resolution or rejection — right for a call
+      that answers once. Pass `false` for a source that calls back
+      repeatedly; then closing is up to the caller.
+
+      WATCHOUT: The marks are found by walking `exp` for those literal
+      symbols. A callback that lives in a helper function instead of
+      standing inline is invisible to the macro — which is why the
+      `reject` below sits in an inline `fn`.
 
       Example:
-      ```
-      (let [callback-based-fn
-            (fn callback-based-fn
-              [value-to-carry has-to-fail? success fail]
-              (Thread/sleep 1000)
-              (if has-to-fail?
-                (fail [:nope value-to-carry])
-                (success [:yeah value-to-carry])))]
+      ```clojure
+      (require '[jtk-dvlp.async :as a])
 
-        (go
-         (try
-           (-> (callback-based-fn
-                5 true
-                resolve
-                ;; fn must be inline so that `cb->c` can recognize `reject` mark!
-                (fn modifiy-error-before-reject-it [error]
-                  (->> {:error error}
-                       (ex-info \"nix-gut\")
-                       (reject))))
+      (defn read-file
+        [path on-success on-failure]
+        ,,,)
 
-               (<cb!)
-               (println))
+      (a/go
+        (try
+          (println
+           (<cb!
+            (read-file
+             \"/etc/hosts\"
+             resolve
+             ;; Inline, so that `cb->c` can see the `reject` mark.
+             (fn add-context-before-rejecting [error]
+               (->> {:code :read-failed, :path \"/etc/hosts\"}
+                    (ex-info \"could not read file\")
+                    (reject))))))
 
-           (catch ExceptionInfo e
-         (println e)))))
+          (catch ExceptionInfo e
+            (println \"failed:\" (ex-message e) (ex-data e)))))
       ```"
 
      ([exp]
@@ -112,12 +132,10 @@
 
                  ~put-rejection!
                  (fn [x#]
-                   (cond->> x#
-                     (not (jtk-dvlp.async/exception? x#))
-                     (ex-info "callback error" {:code :callback-error})
-
-                     :always
-                     (put-n-close!#)))]
+                   (->> x#
+                        (jtk-dvlp.async/->exception
+                         "callback error" :callback-error)
+                        (put-n-close!#)))]
 
              (try
                (~f ~@forms')
@@ -126,7 +144,10 @@
                  (cljs.core.async/close! c#))
                (catch :default e#
                  (cljs.core.async/put!
-                  c# (ex-info "callback based function error" {:code :callback-based-function-error} e#))
+                  c#
+                  (ex-info
+                   "callback based function error"
+                   {:code :callback-based-function-error} e#))
                  (cljs.core.async/close! c#)))
              c#)
 
@@ -149,12 +170,10 @@
 
                  ~put-rejection!
                  (fn [x#]
-                   (cond->> x#
-                     (not (jtk-dvlp.async/exception? x#))
-                     (ex-info "callback error" {:code :callback-error})
-
-                     :always
-                     (put-n-close!#)))]
+                   (->> x#
+                        (jtk-dvlp.async/->exception
+                         "callback error" :callback-error)
+                        (put-n-close!#)))]
 
              (try
                (~f ~@forms')
@@ -163,13 +182,20 @@
                  (clojure.core.async/close! c#))
                (catch Throwable e#
                  (clojure.core.async/put!
-                  c# (ex-info "callback based function error" {:code :callback-based-function-error} e#))
+                  c#
+                  (ex-info
+                   "callback based function error"
+                   {:code :callback-based-function-error} e#))
                  (clojure.core.async/close! c#)))
              c#))))))
 
 #?(:clj
    (defmacro <cb!
-     "Like `<!` for callback based functions via `cb->c` convertion."
+     "Like `jtk-dvlp.async/<!`, but for a callback-based call: takes
+      the value the callback was given, or throws if it was rejected.
+      Shorthand for `(<! (cb->c ?exp))`.
+
+      Takes the same marks as `cb->c` — see there."
      [?exp]
      `(jtk-dvlp.async/<!
        (jtk-dvlp.async.interop.callback/cb->c ~?exp))))

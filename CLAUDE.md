@@ -167,7 +167,9 @@ steht nur, **woran** er in diesem Projekt hängt.
 | Secrets | `CLOJARS_USERNAME`, `CLOJARS_DEPLOY_TOKEN` — gelesen über `:env/clojars_username` und `:env/clojars_password` in `project.clj` |
 
 **`include-v-in-tag: false`**, weil die vorhandenen Tags `3.6.1` heißen
-und nicht `v3.6.1`.
+und nicht `v3.6.1`. Dazu **`include-v-in-release-name: false`** — der
+Anzeigename des GitHub-Releases hat eine eigene Option und trägt sonst
+weiter ein `v`, obwohl der Tag keins hat.
 
 **`:sign-releases false`**, weil lein sonst per Default eine
 GPG-Signatur verlangt und im Lauf kein Schlüssel liegt.

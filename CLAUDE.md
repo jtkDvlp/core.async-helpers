@@ -149,3 +149,28 @@ nichts prüft, ist grün. Deshalb vergleicht `deftest-async` den
 Zusicherungszähler vor und nach dem Körper und meldet es, wenn keine
 einzige Zusicherung lief. Das ist auch der Grund, warum es das Makro
 gibt und nicht ein schlichtes `deftest` plus `<!!`.
+
+## Versionierung und Release
+
+Der Vorgang steht in den projektübergreifenden Richtlinien
+(„Versionierung und Release"): Conventional Commits, der Release-PR von
+release-please, Tag und Veröffentlichung im selben Workflow-Lauf. Hier
+steht nur, **woran** er in diesem Projekt hängt.
+
+| | |
+|---|---|
+| Build-Datei mit der Version | `project.clj`, Anmerkung `;; x-release-please-version` hinter der Versionsnummer |
+| Konfiguration | `release-please-config.json`, `.release-please-manifest.json` |
+| Workflows | `.github/workflows/release.yml`, `.github/workflows/commit-messages.yml` |
+| Paket-Repository | [Clojars](https://clojars.org/jtk-dvlp/core.async-helpers) |
+| Veröffentlichen | `lein deploy clojars` |
+| Secrets | `CLOJARS_USERNAME`, `CLOJARS_DEPLOY_TOKEN` — gelesen über `:env/clojars_username` und `:env/clojars_password` in `project.clj` |
+
+**`include-v-in-tag: false`**, weil die vorhandenen Tags `3.6.1` heißen
+und nicht `v3.6.1`.
+
+**`:sign-releases false`**, weil lein sonst per Default eine
+GPG-Signatur verlangt und im Lauf kein Schlüssel liegt.
+
+Lokal sind die `:env/`-Schlüssel leer, dann fragt `lein deploy` wie
+gewohnt nach.

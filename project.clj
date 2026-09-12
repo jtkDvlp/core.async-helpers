@@ -1,4 +1,4 @@
-(defproject jtk-dvlp/core.async-helpers "3.6.1"
+(defproject jtk-dvlp/core.async-helpers "3.6.1" ;; x-release-please-version
   :description
   "Helper pack for core.async"
 
@@ -12,9 +12,20 @@
    :url
    "https://www.eclipse.org/legal/epl-2.0/"}
 
+  ;; NOTE: `lein ancient` lists outdated dependencies. Declared here so
+  ;;       the answer does not depend on what happens to be installed
+  ;;       on whoever asks.
+  :plugins
+  [[lein-ancient "1.0.0"]]
+
   :source-paths
   ["src"]
 
+  ;; NOTE: A flat `target`, not lein's per-profile `target/%s`. The
+  ;;       cljs builds write into `target/test-cljs` and
+  ;;       `target/public` themselves; with the default they would sit
+  ;;       outside what `lein clean` wipes, and `target/` is supposed
+  ;;       to be deletable at any time without losing anything.
   :target-path
   "target"
 
@@ -22,10 +33,37 @@
   ^{:protect false}
   [:target-path]
 
+  ;; NOTE: The credentials come from the environment, not from a file
+  ;;       — `:env/clojars_username` reads `CLOJARS_USERNAME`,
+  ;;       `:env/clojars_password` reads `CLOJARS_PASSWORD`. In CI those
+  ;;       hold a Clojars deploy token and the matching user name, taken
+  ;;       from the repository secrets. Locally they are unset, and lein
+  ;;       asks as it always did.
+  ;;
+  ;;       `:sign-releases false` because lein otherwise insists on a
+  ;;       GPG signature and CI has no key. Clojars does not require
+  ;;       one. Turning it back on needs a key in the run, not just the
+  ;;       flag flipped.
+  :deploy-repositories
+  [["clojars"
+    {:url
+     "https://repo.clojars.org/"
+
+     :username
+     :env/clojars_username
+
+     :password
+     :env/clojars_password
+
+     :sign-releases
+     false}]]
+
+  ;; NOTE: core.async is the only real dependency of the library.
+  ;;       Clojure and ClojureScript are `:provided` — on the classpath
+  ;;       for our own build and tests, but never forced on a consumer,
+  ;;       who brings their own.
   :dependencies
-  [[org.clojure/clojure "1.11.3"]
-   [org.clojure/clojurescript "1.11.132"]
-   [org.clojure/core.async "1.9.865"]]
+  [[org.clojure/core.async "1.9.865"]]
 
   ;; NOTE: The tests are `.cljc` on purpose — they are meant to run
   ;;       against ClojureScript later on, unchanged.
@@ -64,16 +102,30 @@
     "--compile" "jtk-dvlp.test-runner"]}
 
   :profiles
-  {:dev
+  {:provided
    {:dependencies
-    [[com.bhauman/figwheel-main "0.2.18"]]
+    [[org.clojure/clojure "1.12.6"]
+     [org.clojure/clojurescript "1.12.145"]]}
+
+   :dev
+   {:dependencies
+    [[com.bhauman/figwheel-main "0.2.20"]]
 
     :source-paths
-    ["dev"]}
+    ["dev"]
+
+    ;; NOTE: figwheel compiles into `target` and serves from there;
+    ;;       without this the dev build does not find its own output.
+    :resource-paths
+    ["target"]}
 
    :repl
    {:dependencies
-    [[cider/piggieback "0.5.3"]]
+    ;; WATCHOUT: piggieback and figwheel have to match. A mismatch does
+    ;;           not fail the build — it shows up as a cljs REPL that
+    ;;           misbehaves, which no test here can catch. 0.7.0 exists;
+    ;;           this pair is the one known to work.
+    [[cider/piggieback "0.6.1"]]
 
     :repl-options
     {:nrepl-middleware

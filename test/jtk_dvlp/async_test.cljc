@@ -22,7 +22,7 @@
       [cljs.core.async :as core-async])
 
    [jtk-dvlp.async :as a]
-   [jtk-dvlp.async.test-support :refer [deftest-async]])
+   [jtk-dvlp.async.test-support :as test-support :refer [deftest-async]])
 
   #?(:clj
      (:import
@@ -64,17 +64,11 @@
     (inc x)))
 
 (defn- foreign-exception
-  "An exception that is *not* an `ExceptionInfo` — `go` is supposed to
-   convert it into one."
+  "An exception that is *not* an `ExceptionInfo` — the propagation is
+   supposed to carry it unchanged."
   [message]
   #?(:clj (RuntimeException. message)
      :cljs (js/Error. message)))
-
-(defn- cause-message
-  [exception]
-  (let [cause (ex-cause exception)]
-    #?(:clj (.getMessage ^Throwable cause)
-       :cljs (.-message cause))))
 
 (defn- stacktrace-text
   "The stack trace as one piece of text, searchable on both platforms."
@@ -100,19 +94,55 @@
     (is (not (a/chan? 42)))
     (is (not (a/chan? [1 2 3])))))
 
-(deftest exception?-only-accepts-exception-info
+(deftest exception?-accepts-anything-throwable
   (is (a/exception? (ex-info "x" {})))
 
-  (testing "a foreign exception does not count"
-    ;; NOTE: On purpose, not an oversight. `go` converts every foreign
-    ;;       exception into an `ExceptionInfo` first; only then is it a
-    ;;       value the propagation can carry.
-    (is (not (a/exception? (foreign-exception "x")))))
+  (testing "a foreign exception counts just as much"
+    ;; NOTE: This is the whole point of the 4.0.0 change. Exceptions
+    ;;       travel as themselves, so \"is this a carried error?\" and
+    ;;       \"can this be thrown?\" are the same question.
+    (is (a/exception? (foreign-exception "x"))))
 
   (testing "plain values are not exceptions"
     (is (not (a/exception? nil)))
     (is (not (a/exception? 42)))
+    (is (not (a/exception? :bad)))
     (is (not (a/exception? {:code :x})))))
+
+(deftest ->exception-passes-exception-info-through
+  ;; NOTE: Whoever already holds an `ExceptionInfo` meant its message
+  ;;       and data — those stay untouched.
+  (let [original (ex-info "mine" {:code :mine, :details 42})]
+    (is (identical? original
+                    (a/->exception "shell" :shell original)))))
+
+(deftest ->exception-passes-a-foreign-exception-through
+  ;; NOTE: Up to 3.x this became the `cause` of a fresh `ExceptionInfo`
+  ;;       carrying `{:code :shell}`. It is handed back untouched now —
+  ;;       the identity check is the point of the test.
+  (let [original (foreign-exception "raw")]
+    (is (identical? original
+                    (a/->exception "shell" :shell original)))))
+
+(deftest ->exception-lifts-a-plain-value-into-the-data
+  ;; NOTE: The case this exists for. `clojure.core/ex-info` demands a
+  ;;       `Throwable` in the cause position and throws a
+  ;;       ClassCastException on anything else, while ClojureScript
+  ;;       takes whatever it is given. A plain value therefore belongs
+  ;;       in the data, not in the cause — and the same way on both
+  ;;       platforms.
+  (let [result
+        (a/->exception "shell" :shell :just-a-value)]
+
+    (is (a/exception? result))
+    (is (= {:code :shell, :error :just-a-value} (ex-data result)))
+    (is (nil? (ex-cause result))))
+
+  (testing "nil and collections as well"
+    (is (= {:code :shell, :error nil}
+           (ex-data (a/->exception "shell" :shell nil))))
+    (is (= {:code :shell, :error {:a 1}}
+           (ex-data (a/->exception "shell" :shell {:a 1}))))))
 
 
 ;;; --- go / go-loop -----------------------------------------------------
@@ -128,15 +158,21 @@
     (is (= "broken" (ex-message result)))
     (is (= {:code :broken} (ex-data result)))))
 
-(deftest-async go-converts-foreign-exception
-  (let [result
-        (core-async/<! (a/go (throw (foreign-exception "raw"))))]
+(deftest-async go-carries-a-foreign-exception-unchanged
+  ;; NOTE: Up to 3.x this arrived as an `ExceptionInfo` carrying
+  ;;       `{:code :unknown}` with the original as its cause. Since
+  ;;       4.0.0 it is the original itself — class, message and all.
+  (let [thrown
+        (foreign-exception "raw")
 
-    (is (a/exception? result))
-    (is (= {:code :unknown} (ex-data result))
-        "the conversion marks itself as one")
-    (is (= "raw" (cause-message result))
-        "the original exception survives as the cause")))
+        result
+        (core-async/<! (a/go (throw thrown)))]
+
+    (is (identical? thrown result)
+        "the very instance that was thrown")
+    (is (= "raw" (ex-message result)))
+    (is (nil? (ex-data result))
+        "nothing was wrapped around it")))
 
 (deftest-async go-loop-runs-to-completion
   (is (= 10 (a/<! (a/go-loop [sum 0, [x & more] [1 2 3 4]]
@@ -154,6 +190,78 @@
     (is (a/exception? result))
     (is (= {:code :loop} (ex-data result)))))
 
+
+#?(:cljs
+   (deftest-async go-lifts-a-thrown-value-that-is-no-exception
+     ;; WATCHOUT: The safety net of the pass-through. JavaScript lets
+     ;;           you `throw 42`; such a value must be lifted, or it
+     ;;           would arrive on the channel indistinguishable from a
+     ;;           result and the error would vanish without a sound.
+     ;;           ClojureScript only — the JVM throws nothing but a
+     ;;           `Throwable`.
+     (let [result (core-async/<! (a/go (throw 42)))]
+       (is (a/exception? result))
+       (is (= {:code :unknown, :error 42} (ex-data result))))))
+
+(deftest-async a-foreign-exception-is-caught-as-what-it-is
+  ;; WATCHOUT: This is the breaking half of 4.0.0. Up to 3.x a `catch
+  ;;           ExceptionInfo` saw every error, because everything was
+  ;;           converted into one. It no longer does — a foreign
+  ;;           exception needs `Exception` (JVM) or `:default` (cljs).
+  (let [thrown
+        (foreign-exception "raw")
+
+        caught
+        ;; NOTE: `core-async/<!`, because the block hands the caught
+        ;;       exception back as its value — `a/<!` would throw it
+        ;;       again and the assertion would never be reached.
+        (core-async/<! (a/go
+                         (try
+                           (a/<! (a/go (throw thrown)))
+                           (catch #?(:clj ExceptionInfo
+                                     :cljs cljs.core/ExceptionInfo) e
+                             ::caught-as-ex-info)
+                           (catch #?(:clj Exception :cljs :default) e
+                             e))))]
+
+    (is (identical? thrown caught)
+        "not the ExceptionInfo branch, and the same instance")))
+
+#?(:clj
+   (deftest go-does-not-catch-an-error
+     ;; WATCHOUT: An `Error` says the machine is in trouble, not that
+     ;;           this computation failed — handing it on as a channel
+     ;;           value would let the program carry on as if it could.
+     ;;           It escapes into core.async's thread instead, which
+     ;;           closes the channel, so the take yields nil.
+     ;;
+     ;;
+     ;; NOTE: The handler is swapped for two reasons at once. It waits
+     ;;       for the escape — core.async closes the channel *before*
+     ;;       rethrowing, so without the wait the test would end while
+     ;;       the error is still in flight — and it keeps the trace out
+     ;;       of the test output, which restoring too early would not.
+     (let [escaped
+           (promise)
+
+           previous
+           (Thread/getDefaultUncaughtExceptionHandler)]
+
+       (try
+         (Thread/setDefaultUncaughtExceptionHandler
+          (reify Thread$UncaughtExceptionHandler
+            (uncaughtException [_ _thread throwable]
+              (deliver escaped throwable))))
+
+         (is (nil? (core-async/<!! (a/go (throw (StackOverflowError. "deep")))))
+             "the channel is closed, the error is not its value")
+
+         (is (instance? StackOverflowError
+                        (deref escaped test-support/timeout-ms nil))
+             "and it really left the block")
+
+         (finally
+           (Thread/setDefaultUncaughtExceptionHandler previous))))))
 
 ;;; --- <! ---------------------------------------------------------------
 
@@ -255,23 +363,21 @@
      (is (thrown-with-msg? ExceptionInfo #"test failure"
                            (a/<?!! (<failing))))))
 
-;; FIXME: `thread-call` and `thread` are unusable. Both call
-;;        `core.async/thread-call` with two arguments (function and
-;;        workload), but the core.async version pinned in project.clj,
-;;        1.3.610, only knows the arity `[f]`. Every call ends in an
-;;        ArityException — the workload argument arrived in a later
-;;        core.async.
-;;
-;;        The tests below spell out the correct behaviour and are
-;;        therefore `^:known-bug`: they stay out of CI but run any time
-;;        with `lein test :known-bug`.
-
 #?(:clj
-   (deftest ^:known-bug thread-call-yields-result
+   (deftest thread-call-yields-result
      (is (= 42 (a/<!! (a/thread-call (fn [] 42)))))))
 
 #?(:clj
-   (deftest ^:known-bug thread-call-carries-exception-info
+   (deftest thread-call-accepts-a-workload
+     ;; NOTE: The argument routes work to a pool per kind. It needs
+     ;;       core.async 1.8.730 or newer — this test is what says so
+     ;;       out loud if the dependency ever moves back.
+     (doseq [workload [:io :compute :mixed]]
+       (is (= workload (a/<!! (a/thread-call (fn [] workload) workload)))
+           (str "workload " workload)))))
+
+#?(:clj
+   (deftest thread-call-carries-exception-info
      (let [result
            (core-async/<!!
             (a/thread-call
@@ -281,22 +387,22 @@
        (is (= {:code :thread} (ex-data result))))))
 
 #?(:clj
-   (deftest ^:known-bug thread-call-converts-foreign-exception
-     (let [result
-           (core-async/<!!
-            (a/thread-call
-             (fn [] (throw (foreign-exception "raw")))))]
+   (deftest thread-call-carries-a-foreign-exception-unchanged
+     (let [thrown
+           (foreign-exception "raw")
 
-       (is (a/exception? result))
-       (is (= {:code :unknown} (ex-data result)))
-       (is (= "raw" (cause-message result))))))
+           result
+           (core-async/<!! (a/thread-call (fn [] (throw thrown))))]
+
+       (is (identical? thrown result))
+       (is (nil? (ex-data result))))))
 
 #?(:clj
-   (deftest ^:known-bug thread-yields-result
+   (deftest thread-yields-result
      (is (= 42 (a/<!! (a/thread 42))))))
 
 #?(:clj
-   (deftest ^:known-bug thread-carries-error
+   (deftest thread-carries-error
      (let [result
            (core-async/<!!
             (a/thread (throw (ex-info "in the thread" {:code :thread}))))]
@@ -330,6 +436,16 @@
 (deftest-async all-collects-every-value
   (is (= [1 2 3] (a/<! (a/all [(<value 1) (<value 2) (<value 3)])))))
 
+(deftest-async map-and-all-handle-no-channels-at-all
+  ;; NOTE: `core.async/map` waits forever here — it counts down the
+  ;;       channels it has and with none it never reaches zero. That
+  ;;       propagated into `all` and `amap`, so an empty collection took
+  ;;       the caller down with it. The answer is now `(f)`, the same
+  ;;       one `clojure.core` gives for folding over nothing.
+  (is (= [] (a/<! (a/all []))))
+  (is (= 0 (a/<! (a/map + []))))
+  (is (= [] (a/<! (a/map vector [])))))
+
 (deftest-async all-carries-error
   (let [result
         (core-async/<! (a/all [(<value 1) (<failing)]))]
@@ -358,6 +474,27 @@
     (a/<! done)
     (is (= [1 2 3] @seen))))
 
+(deftest-async consume!-passes-a-false-through
+  ;; NOTE: A closed channel yields `nil`, and that is the only thing
+  ;;       meant to end the loop. Testing the value for truthiness
+  ;;       instead would make a `false` in the stream look like the end
+  ;;       of it and silently drop everything after it.
+  (let [seen
+        (atom [])
+
+        done
+        (core-async/chan)
+
+        collect!
+        (fn [v]
+          (swap! seen conj v)
+          (when (= v 3)
+            (core-async/close! done)))]
+
+    (a/consume! (core-async/to-chan! [1 false 3]) collect!)
+    (a/<! done)
+    (is (= [1 false 3] @seen))))
+
 
 ;;; --- smap / chain -----------------------------------------------------
 
@@ -385,6 +522,22 @@
     (is (= [1 2 3] (a/<! (a/smap <slowest-first [1 2 3]))))
     (is (= [1 2 3] @finished)
         "sequential: the slowest x=1 still finishes first")))
+
+(deftest-async smap-keeps-falsy-elements
+  ;; NOTE: `nil` and `false` are values like any other. Ending the
+  ;;       mapping on them would drop the rest of the collection without
+  ;;       a word.
+  (is (= [1 nil 3] (a/<! (a/smap (fn [x] (a/go x)) [1 nil 3]))))
+  (is (= [1 false 3] (a/<! (a/smap (fn [x] (a/go x)) [1 false 3])))))
+
+(deftest-async smap-stops-at-the-shortest-collection
+  ;; NOTE: Same rule as `clojure.core/map`.
+  (let [<pair (fn [a b] (a/go [a b]))]
+    (is (= [[1 :a] [2 :b]]
+           (a/<! (a/smap <pair [1 2 3] [:a :b]))))))
+
+(deftest-async smap-handles-an-empty-collection
+  (is (= [] (a/<! (a/smap (fn [x] (a/go x)) [])))))
 
 (deftest-async smap-carries-error
   (let [result
@@ -416,6 +569,27 @@
             x))]
 
     (is (= [1 2 3] (a/<! (a/amap <slowest-first [1 2 3]))))))
+
+(deftest-async amap-keeps-falsy-results
+  ;; NOTE: A go block whose body yields `nil` closes its channel without
+  ;;       putting anything on it, and `core.async/map` cannot tell that
+  ;;       apart from a channel that is done — so a single `nil` used to
+  ;;       take the whole call down and `amap` yielded `nil` instead of
+  ;;       a vector. `amap` boxes each result to keep them apart.
+  (is (= [1 nil 3] (a/<! (a/amap (fn [x] (a/go x)) [1 nil 3]))))
+  (is (= [1 false 3] (a/<! (a/amap (fn [x] (a/go x)) [1 false 3])))))
+
+(deftest-async amap-and-smap-agree-on-falsy-values
+  ;; NOTE: The two differ in how they execute, never in what they
+  ;;       return. A regression in either one shows up here.
+  (let [<identity (fn [x] (a/go x))
+        input     [nil 1 false 2 nil]]
+
+    (is (= (a/<! (a/smap <identity input))
+           (a/<! (a/amap <identity input))))))
+
+(deftest-async amap-handles-an-empty-collection
+  (is (= [] (a/<! (a/amap (fn [x] (a/go x)) [])))))
 
 (deftest-async amap-carries-error
   (let [result
@@ -452,6 +626,16 @@
 (deftest-async areduce-folds-asynchronously
   (let [<sum (fn [accu x] (a/go (+ accu x)))]
     (is (= 6 (a/<! (a/areduce <sum 0 [1 2 3]))))))
+
+(deftest-async areduce-keeps-falsy-items
+  ;; NOTE: Walking the seq rather than testing the item — otherwise the
+  ;;       reduction ends at the first `nil` or `false` in `coll`.
+  (let [<conj (fn [result x] (a/go (conj result x)))]
+    (is (= [1 nil 3] (a/<! (a/areduce <conj [] [1 nil 3]))))
+    (is (= [1 false 3] (a/<! (a/areduce <conj [] [1 false 3]))))))
+
+(deftest-async areduce-handles-an-empty-collection
+  (is (= :init (a/<! (a/areduce (fn [_ _] (a/go :never)) :init [])))))
 
 (deftest-async areduce-carries-error
   (let [result
@@ -498,6 +682,12 @@
 (deftest-async apostwalk-walks-scalars
   (is (= 4 (a/<! (a/apostwalk <double-numbers 2)))))
 
+(deftest-async apostwalk-keeps-nil-inside-collections
+  ;; NOTE: `apostwalk` walks through `amap`, so it used to lose a whole
+  ;;       collection over a single `nil` in it.
+  (is (= [2 nil 6] (a/<! (a/apostwalk <double-numbers [1 nil 3]))))
+  (is (= {:a nil, :b 4} (a/<! (a/apostwalk <double-numbers {:a nil, :b 2})))))
+
 (deftest-async apostwalk-carries-error
   (let [result
         (core-async/<! (a/apostwalk (fn [_] (<failing)) {:a 1}))]
@@ -538,18 +728,8 @@
 
     (is (= [:a 10] (vec result)))))
 
-;; FIXME: `awalk` hangs forever on a record. The record branch builds a
-;;        channel per field, takes the value out with `take!` and drops
-;;        it in the callback — nothing is ever put onto the channel
-;;        itself. The `<!` that follows therefore waits for a value that
-;;        never arrives. Affects `awalk` and with it `apostwalk` and
-;;        `aprewalk`.
-;;
-;;        The test is `^:known-bug`: it stays out of CI (where it would
-;;        hang until the bound) but runs with `lein test :known-bug`.
-
 (defrecord Point [x y])
 
-(deftest-async ^:known-bug awalk-walks-records
+(deftest-async awalk-walks-records
   (is (= (->Point 2 4)
          (a/<! (a/apostwalk <double-numbers (->Point 1 2))))))

@@ -96,17 +96,34 @@
     (is (= :once (a/<! c)))))
 
 #?(:cljs
-   (deftest-async p->c-wraps-foreign-rejections
+   (deftest-async p->c-carries-a-foreign-rejection-unchanged
      ;; NOTE: ClojureScript only. On the JVM a rejection cannot be
      ;;       "foreign" — there is no rejection path there, see
      ;;       `rejected-promise`.
-     (let [result
+     ;;
+     ;;       Up to 3.x this arrived wrapped in an `ExceptionInfo` with
+     ;;       `{:code :promise-error}`. Since 4.0.0 an exception travels
+     ;;       as itself.
+     (let [rejected-with
+           (js/Error. "raw")
+
+           result
            (core-async/<!
-            (promise/p->c (rejected-promise (js/Error. "raw"))))]
+            (promise/p->c (rejected-promise rejected-with)))]
+
+       (is (identical? rejected-with result))
+       (is (nil? (ex-data result))))))
+
+#?(:cljs
+   (deftest-async p->c-lifts-a-rejection-that-is-no-exception
+     ;; WATCHOUT: A promise may reject with anything — `(reject 42)` is
+     ;;           legal. Such a value must be lifted, or it would arrive
+     ;;           on the channel indistinguishable from a resolution.
+     (let [result
+           (core-async/<! (promise/p->c (rejected-promise 42)))]
 
        (is (a/exception? result))
-       (is (= {:code :promise-error} (ex-data result)))
-       (is (= "raw" (.-message (ex-cause result)))))))
+       (is (= {:code :promise-error, :error 42} (ex-data result))))))
 
 #?(:clj
    (def ^:private p->c-max-blocking-ms
@@ -196,19 +213,7 @@
 
     (is (= :resolved (a/<! p)))))
 
-;; FIXME: A rejection with a plain value — `(reject :bad)` — throws a
-;;        ClassCastException on the JVM instead of wrapping the value in
-;;        an `ExceptionInfo`. `forward-error!` hands the plain value to
-;;        `ex-info` through `cond->>` as its *last* argument, so it lands
-;;        in the cause position, and `clojure.core/ex-info` demands a
-;;        `Throwable` there. Nobody catches it here: it escapes to
-;;        whoever called `promise-chan`.
-;;
-;;        ClojureScript is unaffected — there `ex-info` takes any value
-;;        as a cause. The marker still covers both platforms so the test
-;;        stays one piece.
-
-(deftest-async ^:known-bug promise-chan-wraps-the-rejection
+(deftest-async promise-chan-wraps-the-rejection
   (let [p (promise/promise-chan
            (fn [_resolve reject]
              (reject :just-a-value)))
@@ -217,7 +222,8 @@
         (core-async/<! p)]
 
     (is (a/exception? result))
-    (is (= {:code :promise-error} (ex-data result)))))
+    (is (= {:code :promise-error, :error :just-a-value} (ex-data result))
+        "the rejected plain value survives under `:error`")))
 
 (deftest-async promise-chan-passes-exception-info-through
   ;; NOTE: Test for issue #4 ("Carries promise ex-info"). Whoever

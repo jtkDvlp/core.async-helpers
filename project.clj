@@ -12,6 +12,12 @@
    :url
    "https://www.eclipse.org/legal/epl-2.0/"}
 
+  ;; NOTE: `lein ancient` lists outdated dependencies. Declared here so
+  ;;       the answer does not depend on what happens to be installed
+  ;;       on whoever asks.
+  :plugins
+  [[lein-ancient "1.0.0"]]
+
   :source-paths
   ["src"]
 
@@ -48,8 +54,8 @@
      false}]]
 
   :dependencies
-  [[org.clojure/clojure "1.11.3"]
-   [org.clojure/clojurescript "1.11.132"]
+  [[org.clojure/clojure "1.12.6"]
+   [org.clojure/clojurescript "1.12.145"]
    [org.clojure/core.async "1.9.865"]]
 
   ;; NOTE: The tests are `.cljc` on purpose — they are meant to run
@@ -91,14 +97,18 @@
   :profiles
   {:dev
    {:dependencies
-    [[com.bhauman/figwheel-main "0.2.18"]]
+    [[com.bhauman/figwheel-main "0.2.20"]]
 
     :source-paths
     ["dev"]}
 
    :repl
    {:dependencies
-    [[cider/piggieback "0.5.3"]]
+    ;; WATCHOUT: piggieback and figwheel have to match. A mismatch does
+    ;;           not fail the build — it shows up as a cljs REPL that
+    ;;           misbehaves, which no test here can catch. 0.7.0 exists;
+    ;;           this pair is the one known to work.
+    [[cider/piggieback "0.6.1"]]
 
     :repl-options
     {:nrepl-middleware

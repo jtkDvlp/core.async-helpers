@@ -93,6 +93,11 @@ you are not the same thing. The per-version documentation lives on
   the two places that reach into core.async internals — `ManyToManyChannel`
   from `impl.channels` behind `chan?`, and the ioc rewriting `<debug` relies
   on.
+- Clojure 1.11.3 → 1.12.6, ClojureScript 1.11.132 → 1.12.145,
+  figwheel-main 0.2.18 → 0.2.20, piggieback 0.5.3 → 0.6.1. Both suites run
+  green on the new versions.
+- `lein ancient` is declared as a plugin, so "what is outdated here?" has an
+  answer that does not depend on the asker's local setup.
 - A test suite covering every public function and macro on both platforms,
   running in CI on every push and pull request.
 

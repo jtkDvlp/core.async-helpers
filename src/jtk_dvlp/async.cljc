@@ -268,31 +268,19 @@
             v#)))))
 
 #?(:clj
-   (def ^:private thread-call-takes-workload?
-     "Does the core.async on the classpath know `thread-call`'s
-      workload argument?
-
-      NOTE: The argument routes work to a pool per workload kind and
-      arrived only in a later core.async than the one this project
-      pins; passing it to an older one ends in an `ArityException` on
-      every single call. An older core.async has one pool for
-      everything, which is exactly `:mixed` — so leaving the argument
-      off there is not a workaround but the same behaviour under the
-      only name it has.
-
-      Checked rather than assumed because the version is the
-      consumer's to choose: a `:dependencies` entry here is routinely
-      overridden downstream."
-     (->> (meta #'async/thread-call)
-          (:arglists)
-          (some #(= 2 (count %)))
-          (boolean))))
-
-#?(:clj
    (defn thread-call
      "Like `core.async/thread-call`, with the error handling of `go`:
       an exception from `f` becomes the channel's value instead of
       escaping into the thread pool unnoticed.
+
+      `workload` says what `f` does, so core.async can route it to the
+      right pool — `:io`, `:compute` or `:mixed` (the default).
+
+      WATCHOUT: The workload argument needs core.async 1.8.730 or
+      newer. It is the consumer's version that counts, not the one
+      pinned here — a `:dependencies` entry in a library is routinely
+      overridden downstream, and an older core.async answers every
+      single call with an `ArityException`.
 
       Clojure only."
      ([f]
@@ -308,9 +296,7 @@
                 (catch Exception e
                   e)))]
 
-        (if thread-call-takes-workload?
-          (async/thread-call carry-exception workload)
-          (async/thread-call carry-exception))))))
+        (async/thread-call carry-exception workload)))))
 
 #?(:clj
    (defmacro thread

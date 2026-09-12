@@ -25,7 +25,7 @@
   :dependencies
   [[org.clojure/clojure "1.11.3"]
    [org.clojure/clojurescript "1.11.132"]
-   [org.clojure/core.async "1.3.610"]]
+   [org.clojure/core.async "1.9.865"]]
 
   ;; NOTE: The tests are `.cljc` on purpose — they are meant to run
   ;;       against ClojureScript later on, unchanged.

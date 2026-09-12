@@ -55,8 +55,7 @@ you are not the same thing. The per-version documentation lives on
 - `thread` and `thread-call` were unusable and always threw an
   `ArityException`: both passed a workload argument to
   `core.async/thread-call`, which the pinned core.async 1.3.610 does not
-  accept. The arity is now checked at load time and the argument only passed
-  on where it is supported.
+  accept. core.async is now 1.9.865, where it does.
 - Rejecting with a plain value threw a `ClassCastException` on the JVM.
   `(reject :bad)` reached `ex-info` in the cause position, where Clojure
   demands a `Throwable`. Affected `promise-chan`, `p->c` and `cb->c`. In
@@ -84,6 +83,16 @@ you are not the same thing. The per-version documentation lives on
 
 - `->exception`. Public because the expansion of `cb->c` runs in the caller's
   namespace.
+
+### Dependencies
+
+- core.async 1.3.610 → 1.9.865. The pin dated from 2020 and was what made
+  `thread` unusable. **core.async 1.8.730 is the new minimum**: older
+  versions have no workload argument on `thread-call` and answer every call
+  with an `ArityException`. Both test suites run against 1.9.865, including
+  the two places that reach into core.async internals — `ManyToManyChannel`
+  from `impl.channels` behind `chan?`, and the ioc rewriting `<debug` relies
+  on.
 - A test suite covering every public function and macro on both platforms,
   running in CI on every push and pull request.
 

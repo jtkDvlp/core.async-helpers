@@ -369,10 +369,9 @@
 
 #?(:clj
    (deftest thread-call-accepts-a-workload
-     ;; NOTE: The argument routes work to a pool per kind. Older
-     ;;       core.async versions do not know it and have one pool for
-     ;;       everything — the call still has to go through, see
-     ;;       `thread-call-takes-workload?`.
+     ;; NOTE: The argument routes work to a pool per kind. It needs
+     ;;       core.async 1.8.730 or newer — this test is what says so
+     ;;       out loud if the dependency ever moves back.
      (doseq [workload [:io :compute :mixed]]
        (is (= workload (a/<!! (a/thread-call (fn [] workload) workload)))
            (str "workload " workload)))))

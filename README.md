@@ -54,6 +54,8 @@ Full reference per namespace:
 
 [![Clojars Project](https://img.shields.io/clojars/v/jtk-dvlp/core.async-helpers.svg)](https://clojars.org/jtk-dvlp/core.async-helpers)
 
+Needs **core.async 1.8.730 or newer** — that is where `thread-call` got its workload argument, which `thread` and `thread-call` pass on. The version your project resolves is the one that counts: a `:dependencies` entry in a library is routinely overridden downstream, and an older core.async answers every `thread` call with an `ArityException`.
+
 ### Do not mix with `clojure.core.async`
 
 Error propagation works because the error is an ordinary value on the channel. A plain `core.async/<!` in between takes that value silently — the error is gone, and nothing is left to notice it by. The same goes for a `core.async/go` block inside a stack of propagating ones: it does not carry the error on, and the chain breaks there.

@@ -4,9 +4,6 @@
   :watch-dirs
   ["src" "dev"]
 
-  :ring-server-options
-  {:port 9801}
-
   ,,,}
 
 {:main

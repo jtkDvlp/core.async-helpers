@@ -21,6 +21,11 @@
   :source-paths
   ["src"]
 
+  ;; NOTE: A flat `target`, not lein's per-profile `target/%s`. The
+  ;;       cljs builds write into `target/test-cljs` and
+  ;;       `target/public` themselves; with the default they would sit
+  ;;       outside what `lein clean` wipes, and `target/` is supposed
+  ;;       to be deletable at any time without losing anything.
   :target-path
   "target"
 
@@ -53,10 +58,12 @@
      :sign-releases
      false}]]
 
+  ;; NOTE: core.async is the only real dependency of the library.
+  ;;       Clojure and ClojureScript are `:provided` — on the classpath
+  ;;       for our own build and tests, but never forced on a consumer,
+  ;;       who brings their own.
   :dependencies
-  [[org.clojure/clojure "1.12.6"]
-   [org.clojure/clojurescript "1.12.145"]
-   [org.clojure/core.async "1.9.865"]]
+  [[org.clojure/core.async "1.9.865"]]
 
   ;; NOTE: The tests are `.cljc` on purpose — they are meant to run
   ;;       against ClojureScript later on, unchanged.
@@ -95,12 +102,22 @@
     "--compile" "jtk-dvlp.test-runner"]}
 
   :profiles
-  {:dev
+  {:provided
+   {:dependencies
+    [[org.clojure/clojure "1.12.6"]
+     [org.clojure/clojurescript "1.12.145"]]}
+
+   :dev
    {:dependencies
     [[com.bhauman/figwheel-main "0.2.20"]]
 
     :source-paths
-    ["dev"]}
+    ["dev"]
+
+    ;; NOTE: figwheel compiles into `target` and serves from there;
+    ;;       without this the dev build does not find its own output.
+    :resource-paths
+    ["target"]}
 
    :repl
    {:dependencies

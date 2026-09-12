@@ -10,6 +10,21 @@ what you read on GitHub and what `[jtk-dvlp/core.async-helpers "3.6.1"]` gives
 you are not the same thing. The per-version documentation lives on
 [cljdoc](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT).
 
+## [4.0.0](https://github.com/jtkDvlp/core.async-helpers/compare/3.6.1...4.0.0) (2026-09-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* core.async 1.8.730 is the new minimum. It is the version the consuming project resolves that counts, not the one pinned here — a library's `:dependencies` entry is routinely overridden downstream, and an older core.async answers every `thread` call with an `ArityException`. The requirement is stated in the README and in `thread-call`'s docstring, where the arity check used to explain itself.
+* An `Error` thrown inside a go block no longer arrives as the block's value. Code that took an `OutOfMemoryError` off a channel and handled it there sees a closed channel instead.
+* `catch ExceptionInfo` no longer sees a foreign exception; it needs `Exception` on the JVM and `:default` in ClojureScript. The break is a quiet one — the error does not disappear, it climbs past the catch to the next one. `ex-data` is `nil` for such an exception, so the `{:code …}` convention now only holds for what this library builds itself. `exception?` accordingly answers for anything throwable, and `throwable?`, added earlier in this same unreleased series, is gone as a duplicate of it.
+
+### Features
+
+* carry exceptions as themselves instead of wrapping them ([3dc5a80](https://github.com/jtkDvlp/core.async-helpers/commit/3dc5a80241c9ff15f3cd6bb57007edb994590dc5))
+* let an Error out of a go block instead of catching it ([59c8a39](https://github.com/jtkDvlp/core.async-helpers/commit/59c8a390d0f62f8a390c3b21e3fa5784b0436561))
+* raise core.async to 1.9.865 and pass the workload on unconditionally ([bb7f476](https://github.com/jtkDvlp/core.async-helpers/commit/bb7f4763b60622c47985377f2f3d07c5185e193a))
+
 ## [Unreleased]
 
 ### Changed — breaking

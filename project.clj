@@ -1,4 +1,4 @@
-(defproject jtk-dvlp/core.async-helpers "3.6.1" ;; x-release-please-version
+(defproject jtk-dvlp/core.async-helpers "4.0.0" ;; x-release-please-version
   :description
   "Helper pack for core.async"
 

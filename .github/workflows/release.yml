@@ -81,11 +81,14 @@ jobs:
       #       exactly the artifact about to be published. Publishing
       #       cannot be taken back: Clojars refuses a second upload of
       #       the same version.
-      # NOTE: The same test run as in ci.yml. Whatever gets added
+      # NOTE: The same two runs as in ci.yml. Whatever gets added
       #       there belongs here too — this is the last gate before
       #       something leaves the house.
       - name: Test (Clojure)
         run: lein test
+
+      - name: Test (ClojureScript)
+        run: lein test-cljs && node target/test-cljs/tests.js
 
       - name: Publish
         run: lein deploy clojars

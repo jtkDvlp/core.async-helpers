@@ -110,13 +110,14 @@ bekommen. Solche Stellen tragen einen Kommentar.
 lein test              # Clojure
 lein test :known-bug   # nur die Tests zu bekannten Fehlern
 lein test :all         # beides
+
+lein test-cljs && node target/test-cljs/tests.js   # ClojureScript
 ```
 
-Das läuft in der GitHub Action (`.github/workflows/ci.yml`) bei jedem
+Beides läuft in der GitHub Action (`.github/workflows/ci.yml`) bei jedem
 Push und jedem Pull Request.
 
-Die Tests liegen in `.cljc` und sind so geschrieben, dass sie auf
-**beiden** Plattformen laufen. Dafür
+Die Tests liegen in `.cljc` und laufen auf **beiden** Plattformen. Dafür
 gibt es `jtk-dvlp.async.test-support/deftest-async`: der Testkörper läuft
 in einem `go`-Block, auf Clojure blockierend abgewartet, auf
 ClojureScript über `cljs.test/async`. Ein neuer Test wird damit
@@ -127,11 +128,24 @@ Reader-Conditionals — dort und nur dort.
 
 **`^:known-bug` markiert Tests, die einen vorhandenen Fehler der
 Bibliothek einfordern.** Sie beschreiben das richtige Verhalten und
-schlagen deshalb heute fehl; der Test-Selektor nimmt sie aus dem
-CI-Lauf. Welcher Fehler gemeint ist, steht als `FIXME:` direkt darüber.
-Wer einen davon behebt, entfernt die Markierung mit.
+schlagen deshalb fehl; der Test-Selektor nimmt sie aus dem CI-Lauf.
+Welcher Fehler gemeint ist, steht als `FIXME:` direkt darüber. Wer
+einen davon behebt, entfernt die Markierung mit.
 
-**Ein `deftest-async` ohne `is` schlägt nicht fehl.** Läuft der Körper in
-eine Ausnahme, bevor eine Assertion greift, meldet der Test das; läuft er
-gar nicht an, meldet niemand etwas. Deshalb prüft jeder Test mindestens
-eine Zusicherung.
+Gerade gibt es keine. Die Markierung ist der Weg für einen Fehler, der
+auffällt, aber nicht im selben Zug behoben wird — der Test bleibt dann
+stehen, statt verlorenzugehen.
+
+Auf ClojureScript gibt es keine Test-Selektoren. Damit `^:known-bug`
+dort dasselbe bedeutet, sammelt `jtk-dvlp.test-runner` die Test-Vars
+selbst ein und siebt die markierten heraus. **Ein neuer
+Test-Namespace muss dort in den `:require` und in die
+`ns-interns`-Liste** — sonst läuft er auf Clojure mit und auf
+ClojureScript stillschweigend nicht.
+
+**Ein `deftest-async` ohne `is` schlägt fehl.** Ein asynchroner
+Testkörper, der zu früh zurückkehrt, prüft nichts — und ein Test, der
+nichts prüft, ist grün. Deshalb vergleicht `deftest-async` den
+Zusicherungszähler vor und nach dem Körper und meldet es, wenn keine
+einzige Zusicherung lief. Das ist auch der Grund, warum es das Makro
+gibt und nicht ein schlichtes `deftest` plus `<!!`.

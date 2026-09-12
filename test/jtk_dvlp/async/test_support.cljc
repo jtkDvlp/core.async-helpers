@@ -46,17 +46,41 @@
   [test-name exception]
   (str "`" test-name "` threw unexpectedly: " (pr-str exception)))
 
+(defn no-assertion-message
+  [test-name]
+  (str "`" test-name "` asserted nothing. A test body that never "
+       "reaches an `is` passes without testing anything — most likely "
+       "it returned early, or the assertion sits behind a `when` that "
+       "did not fire."))
+
+(defn assertion-count
+  "How many assertions the running test has made so far.
+
+   NOTE: This is what makes the check below possible at all —
+   `clojure.test` and `cljs.test` both keep a counter per run, so
+   comparing it before and after the body says whether any assertion
+   actually ran. Returns `nil` outside a test run, e.g. at the REPL."
+  []
+  (let [counters
+        #?(:clj  (some-> clojure.test/*report-counters* deref)
+           :cljs (:report-counters (cljs.test/get-current-env)))]
+
+    (when counters
+      (+ (:pass counters 0)
+         (:fail counters 0)
+         (:error counters 0)))))
+
 #?(:clj
    (defmacro deftest-async
      "Like `clojure.test/deftest` and `cljs.test/deftest`, but `body`
       runs inside a `go` block and may use `<!`.
 
-      The test fails if `body` throws, or if the channel does not
-      deliver within `timeout-ms`.
-
-      WATCHOUT: A test body without an `is` counts as passing. Anyone
-      adding a test here asserts at least once — otherwise the test
-      tests nothing and does not say so."
+      The test fails if `body` throws, if the channel does not deliver
+      within `timeout-ms`, or if the body never got as far as an
+      assertion. That last one is the reason this macro exists rather
+      than a plain `deftest` plus `<!!`: an asynchronous body that
+      returns early asserts nothing, and a test asserting nothing
+      passes."
      [test-name & body]
      (let [test-label
            (str test-name)]
@@ -70,7 +94,10 @@
               ;;       the test could not report the exception as a
               ;;       failure.
               (cljs.core.async/go
-                (let [test-channel#
+                (let [assertions-before#
+                      (jtk-dvlp.async.test-support/assertion-count)
+
+                      test-channel#
                       (jtk-dvlp.async/go ~@body)
 
                       [result# port#]
@@ -79,6 +106,10 @@
                         (cljs.core.async/timeout
                          jtk-dvlp.async.test-support/timeout-ms)])]
 
+                  ;; NOTE: The order matters — a timeout or an exception
+                  ;;       is already a failure, and each reports one, so
+                  ;;       the assertion check below cannot fire on top
+                  ;;       of it.
                   (cond
                     (not= port# test-channel#)
                     (cljs.test/is
@@ -90,14 +121,24 @@
                     (cljs.test/is
                      false
                      (jtk-dvlp.async.test-support/unexpected-exception-message
-                      ~test-label result#)))
+                      ~test-label result#))
+
+                    (= assertions-before#
+                       (jtk-dvlp.async.test-support/assertion-count))
+                    (cljs.test/is
+                     false
+                     (jtk-dvlp.async.test-support/no-assertion-message
+                      ~test-label)))
 
                   (done#)))))
 
          `(clojure.test/deftest ~test-name
             ;; NOTE: See the ClojureScript branch — `core.async/alts!!`
             ;;       is deliberate, to see the raw value.
-            (let [test-channel#
+            (let [assertions-before#
+                  (jtk-dvlp.async.test-support/assertion-count)
+
+                  test-channel#
                   (jtk-dvlp.async/go ~@body)
 
                   [result# port#]
@@ -106,6 +147,9 @@
                     (clojure.core.async/timeout
                      jtk-dvlp.async.test-support/timeout-ms)])]
 
+              ;; NOTE: The order matters — a timeout or an exception is
+              ;;       already a failure, and each reports one, so the
+              ;;       assertion check below cannot fire on top of it.
               (cond
                 (not= port# test-channel#)
                 (clojure.test/is
@@ -117,4 +161,11 @@
                 (clojure.test/is
                  false
                  (jtk-dvlp.async.test-support/unexpected-exception-message
-                  ~test-label result#)))))))))
+                  ~test-label result#))
+
+                (= assertions-before#
+                   (jtk-dvlp.async.test-support/assertion-count))
+                (clojure.test/is
+                 false
+                 (jtk-dvlp.async.test-support/no-assertion-message
+                  ~test-label)))))))))

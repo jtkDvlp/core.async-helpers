@@ -5,20 +5,23 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-`Unreleased` is what sits on the default branch but is not on Clojars yet — so
-what you read on GitHub and what `[jtk-dvlp/core.async-helpers "3.6.1"]` gives
-you are not the same thing. The per-version documentation lives on
+From 4.0.0 on this file is written by
+[release-please](https://github.com/googleapis/release-please) out of the
+commit messages. What sits on the default branch but is not on Clojars yet
+stands in the open release pull request, not here. The per-version
+documentation lives on
 [cljdoc](https://cljdoc.org/d/jtk-dvlp/core.async-helpers/CURRENT).
 
-## [Unreleased]
+## [4.0.0](https://github.com/jtkDvlp/core.async-helpers/compare/3.6.1...4.0.0) (2026-09-12)
 
 ### Changed — breaking
 
-- **An exception now travels as itself.** Up to 3.x everything that was not
-  already an `ExceptionInfo` was converted into one carrying
-  `{:code :unknown}`, with the original as its `cause`. A `RuntimeException`
-  or a plain `js/Error` is now carried and rethrown unchanged — same class,
-  same message, same `ex-data`.
+- **An exception now travels as itself**
+  ([3dc5a80](https://github.com/jtkDvlp/core.async-helpers/commit/3dc5a80241c9ff15f3cd6bb57007edb994590dc5)).
+  Up to 3.x everything that was not already an `ExceptionInfo` was converted
+  into one carrying `{:code :unknown}`, with the original as its `cause`. A
+  `RuntimeException` or a plain `js/Error` is now carried and rethrown
+  unchanged — same class, same message, same `ex-data`.
 
   **What breaks:** `(catch ExceptionInfo e …)` was the documented pattern and
   no longer sees a foreign exception. It needs `Exception` on the JVM and
@@ -37,11 +40,13 @@ you are not the same thing. The per-version documentation lives on
   an `ExceptionInfo`, now with the value under `:error`. Without that it
   would arrive on the channel indistinguishable from a result.
 
-- **`Error` is no longer caught on the JVM.** A `StackOverflowError` or
-  `OutOfMemoryError` used to become an ordinary channel value, letting the
-  program carry on as if it could. It now escapes into core.async's thread,
-  which closes the channel. Catching is `Exception` in `go`, `thread-call`
-  and `cb->c`. ClojureScript has no such distinction.
+- **`Error` is no longer caught on the JVM**
+  ([59c8a39](https://github.com/jtkDvlp/core.async-helpers/commit/59c8a390d0f62f8a390c3b21e3fa5784b0436561)).
+  A `StackOverflowError` or `OutOfMemoryError` used to become an ordinary
+  channel value, letting the program carry on as if it could. It now escapes
+  into core.async's thread, which closes the channel. Catching is
+  `Exception` in `go`, `thread-call` and `cb->c`. ClojureScript has no such
+  distinction.
 
 - `exception?` answers whether a value is a carried error, and that is now
   anything throwable — a `Throwable` on the JVM, a `js/Error` in
@@ -83,16 +88,19 @@ you are not the same thing. The per-version documentation lives on
 
 - `->exception`. Public because the expansion of `cb->c` runs in the caller's
   namespace.
+- A test suite covering every public function and macro on both platforms,
+  running in CI on every push and pull request.
 
 ### Dependencies
 
-- core.async 1.3.610 → 1.9.865. The pin dated from 2020 and was what made
-  `thread` unusable. **core.async 1.8.730 is the new minimum**: older
-  versions have no workload argument on `thread-call` and answer every call
-  with an `ArityException`. Both test suites run against 1.9.865, including
-  the two places that reach into core.async internals — `ManyToManyChannel`
-  from `impl.channels` behind `chan?`, and the ioc rewriting `<debug` relies
-  on.
+- core.async 1.3.610 → 1.9.865
+  ([bb7f476](https://github.com/jtkDvlp/core.async-helpers/commit/bb7f4763b60622c47985377f2f3d07c5185e193a)).
+  The pin dated from 2020 and was what made `thread` unusable. **core.async
+  1.8.730 is the new minimum**: older versions have no workload argument on
+  `thread-call` and answer every call with an `ArityException`. Both test
+  suites run against 1.9.865, including the two places that reach into
+  core.async internals — `ManyToManyChannel` from `impl.channels` behind
+  `chan?`, and the ioc rewriting `<debug` relies on.
 - Clojure 1.11.3 → 1.12.6, ClojureScript 1.11.132 → 1.12.145,
   figwheel-main 0.2.18 → 0.2.20, piggieback 0.5.3 → 0.6.1. Both suites run
   green on the new versions.
@@ -102,8 +110,6 @@ you are not the same thing. The per-version documentation lives on
   its own. core.async is the only compile-scope dependency left.
 - `lein ancient` is declared as a plugin, so "what is outdated here?" has an
   answer that does not depend on the asker's local setup.
-- A test suite covering every public function and macro on both platforms,
-  running in CI on every push and pull request.
 
 ## [3.6.1] - 2026-08-31
 
@@ -164,7 +170,6 @@ the [tags](https://github.com/jtkDvlp/core.async-helpers/tags).
 [#3]: https://github.com/jtkDvlp/core.async-helpers/issues/3
 [#4]: https://github.com/jtkDvlp/core.async-helpers/issues/4
 [#5]: https://github.com/jtkDvlp/core.async-helpers/issues/5
-[Unreleased]: https://github.com/jtkDvlp/core.async-helpers/compare/3.6.1...master
 [3.6.1]: https://github.com/jtkDvlp/core.async-helpers/compare/3.6.0...3.6.1
 [3.6.0]: https://github.com/jtkDvlp/core.async-helpers/compare/3.5.1...3.6.0
 [3.5.1]: https://github.com/jtkDvlp/core.async-helpers/compare/3.5.0...3.5.1

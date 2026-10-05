@@ -127,6 +127,72 @@ The `catch` sees the error from `<fail-during-some-async-stuff` even though it w
 
 Up to 3.x everything was converted into an `ExceptionInfo` first, so `catch ExceptionInfo` saw every error. If you are upgrading from 3.x, that is the one thing to go through your handlers for — see the [changelog](CHANGELOG.md).
 
+### Wrapping these macros in your own macro (ClojureScript)
+
+Most of what this library offers is a macro, and a macro expands in *your*
+namespace. The expansion names its vars in full — `promise-go` becomes
+
+```clojure
+(jtk-dvlp.async.interop.promise/->promise-chan
+  (jtk-dvlp.async/go ,,,))
+```
+
+— and ClojureScript resolves those names against the namespace the expansion
+landed in. If that namespace knows the library only as a macro source, the
+compiler warns:
+
+```
+WARNING: Use of undeclared Var jtk-dvlp.async.interop.promise/->promise-chan
+WARNING: Use of undeclared Var cljs.core.async/go
+```
+
+It still runs — the namespace gets loaded through the dependency chain — but
+the warning is real and the resolution is order-dependent, so do not rely on
+it.
+
+**Require with a plain `:require`, not `:require-macros`.** Every namespace
+here requires its own macros internally, so a plain `:require` gives you the
+functions *and* the macros — ClojureScript calls this [implicit macro
+loading](https://clojurescript.org/guides/ns-forms#_implicit_sugar):
+
+```clojure
+(ns your-project
+  (:require
+   [jtk-dvlp.async :as a]
+   [jtk-dvlp.async.interop.promise :as promise]))
+
+(promise/promise-go 42)   ;; macro and runtime var both resolve
+```
+
+**Write your own macro the same way.** Put it in a `.cljc` that requires its
+own macros, and require this library on the runtime side:
+
+```clojure
+(ns your-project.macros
+  #?(:cljs
+     (:require-macros
+      [your-project.macros :refer [with-promise]]))
+
+  (:require
+   [jtk-dvlp.async.interop.promise]))
+
+#?(:clj
+   (defmacro with-promise
+     [& body]
+     `(jtk-dvlp.async.interop.promise/promise-go ~@body)))
+```
+
+Whoever uses `with-promise` then needs nothing but
+`(:require [your-project.macros :refer [with-promise]])` — the runtime side of
+your namespace carries what the expansion needs, and they never learn that
+this library was involved.
+
+**A macro namespace in a plain `.clj` cannot do that.** It has no
+ClojureScript runtime side, so callers must reach it through
+`:require-macros`, and then they have to require
+`jtk-dvlp.async.interop.promise` themselves. Say so in the macro's docstring,
+or move the namespace to `.cljc`.
+
 ## Development
 
 ```bash

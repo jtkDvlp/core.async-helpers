@@ -127,6 +127,66 @@ The `catch` sees the error from `<fail-during-some-async-stuff` even though it w
 
 Up to 3.x everything was converted into an `ExceptionInfo` first, so `catch ExceptionInfo` saw every error. If you are upgrading from 3.x, that is the one thing to go through your handlers for — see the [changelog](CHANGELOG.md).
 
+### Wrapping these macros in your own macro (ClojureScript)
+
+Nothing here is specific to this library — it is how ClojureScript macros
+work, and the official documentation covers it:
+[Differences from Clojure › Macros](https://clojurescript.org/about/differences#_macros)
+and
+[› Namespaces](https://clojurescript.org/about/differences#_namespaces)
+(*implicit macro loading*), plus the
+[Namespaces guide](https://clojurescript.org/guides/ns-forms#_implicit_sugar).
+What those pages do not mention is the symptom, so here it is.
+
+**Require with `:require`, not `:require-macros`.** Every namespace here
+requires its own macros internally, so a plain `:require` gives you the
+functions *and* the macros:
+
+```clojure
+(ns your-project
+  (:require
+   [jtk-dvlp.async :as a]
+   [jtk-dvlp.async.interop.promise :as promise]))
+```
+
+Reach for `:require-macros` instead and the compiler warns, because a macro
+expands in *your* namespace and names its vars in full — `promise-go`
+becomes `(jtk-dvlp.async.interop.promise/->promise-chan (jtk-dvlp.async/go ,,,))`,
+and nothing in your namespace declared those:
+
+```
+WARNING: Use of undeclared Var jtk-dvlp.async.interop.promise/->promise-chan
+WARNING: Use of undeclared Var cljs.core.async/go
+```
+
+It still runs — the namespace arrives through the dependency chain — but the
+resolution depends on analysis order, so do not lean on it.
+
+**Wrapping one of these macros in your own needs three things**, and missing
+any one of them brings the warning back at the call sites of *your* macro:
+
+```clojure
+(ns your-project.macros          ;; 1. a .cljc — a .clj has no runtime side
+  #?(:cljs
+     (:require-macros            ;; 2. the self-reference, so callers can
+      [your-project.macros       ;;    use a plain :require
+       :refer [with-promise]]))
+
+  (:require                      ;; 3. platform-neutral, NOT in #?(:clj …):
+   [jtk-dvlp.async.interop.promise]))   ;; the expansion runs in the browser
+
+#?(:clj
+   (defmacro with-promise
+     [& body]
+     `(jtk-dvlp.async.interop.promise/promise-go ~@body)))
+```
+
+Then `(:require [your-project.macros :refer [with-promise]])` is all your
+callers need, and they never learn that this library was involved. Keep the
+library require inside `#?(:clj …)` — the tempting mistake, since the macro
+only needs it at compile time — and the ClojureScript runtime side does not
+carry it, so the warning stays.
+
 ## Development
 
 ```bash

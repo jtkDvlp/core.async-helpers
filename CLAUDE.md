@@ -93,6 +93,27 @@ Drei Dinge daran sind leicht zu übersehen:
 In expandiertem Code werden Namespaces **voll ausgeschrieben**
 (`jtk-dvlp.async/<!`, nicht `<!`). Der Aufrufer hat unsere Aliase nicht.
 
+**WATCHOUT: Voll qualifiziert heißt nicht aufgelöst.** Die Expansion
+landet im Namespace des Aufrufers, und ClojureScript löst ihre Namen
+gegen *dessen* `:require`-Einträge auf. Holt der Aufrufer uns nur per
+`:require-macros`, warnt der Compiler über jeden Var der Expansion
+(`Use of undeclared Var jtk-dvlp.async.interop.promise/->promise-chan`).
+Gemessen an 3.2.0 und 4.0.0, gleiches Ergebnis.
+
+Das ist allgemeines ClojureScript-Verhalten, nicht unseres. Offiziell
+beschrieben in
+[Differences from Clojure › Macros](https://clojurescript.org/about/differences#_macros)
+und [› Namespaces](https://clojurescript.org/about/differences#_namespaces)
+(*implicit macro loading*). Den Fehlerfall nennen die Seiten nicht — nur
+das Mittel dagegen, und das ist genau der Selbstverweis oben: Weil jeder
+Namespace hier seine eigenen Makros requirt, genügt dem Aufrufer ein
+schlichtes `:require`.
+
+Daraus die Regel: **nie `:require-macros` empfehlen.** Das ist die Form,
+die bricht. Für Nutzer, die unsere Makros in eigene wickeln, steht der
+Fall samt vollständigem ns-Formular in der README („Wrapping these macros
+in your own macro").
+
 ## WATCHOUT: nicht mit `clojure.core.async` mischen
 
 Die Fehlerfortpflanzung lebt davon, dass eine Ausnahme als *Wert* durch
